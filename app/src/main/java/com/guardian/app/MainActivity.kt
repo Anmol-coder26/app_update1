@@ -7,12 +7,22 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.guardian.app.ui.theme.GuardianTheme
+import com.guardian.app.ui.theme.GxBase
+import com.guardian.app.ui.theme.GxBorder
+import com.guardian.app.ui.theme.GxDanger
+import com.guardian.app.ui.theme.GxDangerSoft
+import com.guardian.app.ui.theme.GxPrimary
+import com.guardian.app.ui.theme.GxPrimaryGlow
+import com.guardian.app.ui.theme.GxSafe
+import com.guardian.app.ui.theme.GxSurface
+import com.guardian.app.ui.theme.GxSurfaceAlt
+import com.guardian.app.ui.theme.GxTextHi
+import com.guardian.app.ui.theme.GxTextLo
+import com.guardian.app.ui.theme.GxTextMid
+import com.guardian.app.ui.theme.GxVoid
+import com.guardian.app.ui.theme.GxWarning
 
 class MainActivity : ComponentActivity() {
     private val protectionPermissionLauncher =
@@ -64,43 +74,17 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Sophisticated Obsidian Cyber Palette (Pleasing, Modern, Non-Generic)
-val DarkBackground = Color(0xFF090D16)
-val DarkSurface = Color(0xFF111726)
-val DarkSurfaceElevated = Color(0xFF192237)
-val DarkSurfaceVariant = Color(0xFF222F4C)
-val CyberEmerald = Color(0xFF10B981)
-val CyberEmeraldGlow = Color(0xFF064E3B)
-val ElectricIndigo = Color(0xFF6366F1)
-val CoralRed = Color(0xFFEF4444)
-val AmberWarning = Color(0xFFF59E0B)
-val TextPrimary = Color(0xFFF8FAFC)
-val TextSecondary = Color(0xFF94A3B8)
-val TextMuted = Color(0xFF64748B)
-val BorderSubtle = Color(0xFF1E293B)
-
-@Composable
-fun GuardianTheme(content: @Composable () -> Unit) {
-    val darkColors = darkColorScheme(
-        primary = CyberEmerald,
-        onPrimary = Color(0xFF022C22),
-        primaryContainer = CyberEmeraldGlow,
-        onPrimaryContainer = Color(0xFFA7F3D0),
-        secondary = ElectricIndigo,
-        onSecondary = Color.White,
-        background = DarkBackground,
-        surface = DarkSurface,
-        surfaceVariant = DarkSurfaceVariant,
-        onSurface = TextPrimary,
-        onSurfaceVariant = TextSecondary,
-        error = CoralRed,
-        errorContainer = Color(0xFF450A0A),
-        onErrorContainer = Color(0xFFFECACA),
-        outline = BorderSubtle
-    )
-
-    MaterialTheme(
-        colorScheme = darkColors,
-        content = content
-    )
-}
+// Design Token Aliases for backward-compatibility
+val DarkBackground = GxBase
+val DarkSurface = GxSurface
+val DarkSurfaceElevated = GxSurfaceAlt
+val DarkSurfaceVariant = GxSurfaceAlt
+val CyberEmerald = GxSafe
+val CyberEmeraldGlow = GxPrimaryGlow
+val ElectricIndigo = GxPrimary
+val CoralRed = GxDanger
+val AmberWarning = GxWarning
+val TextPrimary = GxTextHi
+val TextSecondary = GxTextMid
+val TextMuted = GxTextLo
+val BorderSubtle = GxBorder

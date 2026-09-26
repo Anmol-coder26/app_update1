@@ -1,11 +1,21 @@
 package com.guardian.app
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,36 +32,34 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.PhoneDisabled
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -61,6 +69,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -69,13 +78,45 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.guardian.app.ui.components.GxButton
+import com.guardian.app.ui.components.GxCard
+import com.guardian.app.ui.components.GxChip
+import com.guardian.app.ui.components.GxChipVariant
+import com.guardian.app.ui.components.GxLiveDot
+import com.guardian.app.ui.components.GxRiskRing
+import com.guardian.app.ui.theme.GxBase
+import com.guardian.app.ui.theme.GxBorder
+import com.guardian.app.ui.theme.GxDanger
+import com.guardian.app.ui.theme.GxDangerSoft
+import com.guardian.app.ui.theme.GxPrimary
+import com.guardian.app.ui.theme.GxPrimaryGlow
+import com.guardian.app.ui.theme.GxPrimarySoft
+import com.guardian.app.ui.theme.GxSafe
+import com.guardian.app.ui.theme.GxSafeSoft
+import com.guardian.app.ui.theme.GxShapeLg
+import com.guardian.app.ui.theme.GxShapeMd
+import com.guardian.app.ui.theme.GxShapePill
+import com.guardian.app.ui.theme.GxShapeSm
+import com.guardian.app.ui.theme.GxSurface
+import com.guardian.app.ui.theme.GxSurfaceAlt
+import com.guardian.app.ui.theme.GxTextHi
+import com.guardian.app.ui.theme.GxTextLo
+import com.guardian.app.ui.theme.GxTextMid
+import com.guardian.app.ui.theme.GxVoid
+import com.guardian.app.ui.theme.GxWarning
+import com.guardian.app.ui.theme.GxWarningSoft
+import com.guardian.app.ui.theme.gxFancyGlow
 
 // ==========================================
-// 1. AUTH SCREEN (Obsidian Cyber)
+// 1. AUTH SCREEN (Obsidian Security Aesthetic)
 // ==========================================
 @Composable
 fun AuthScreen(onContinue: (String) -> Unit) {
@@ -86,7 +127,7 @@ fun AuthScreen(onContinue: (String) -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(GxBase)
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -94,29 +135,34 @@ fun AuthScreen(onContinue: (String) -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.Start
         ) {
-            // Glowing Shield Icon
+            // Glowing Logo Shield
             Surface(
-                color = CyberEmeraldGlow,
-                shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.5f)),
-                modifier = Modifier.size(56.dp)
+                color = GxPrimarySoft,
+                shape = GxShapeMd,
+                border = BorderStroke(1.dp, GxPrimary.copy(alpha = 0.4f)),
+                modifier = Modifier.size(54.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Default.Shield,
                         contentDescription = null,
-                        tint = CyberEmerald,
-                        modifier = Modifier.size(32.dp)
+                        tint = GxPrimary,
+                        modifier = Modifier.size(28.dp)
                     )
                 }
             }
 
             Spacer(Modifier.height(20.dp))
 
-            Text("Guardian Defense", fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
             Text(
-                "Real-time proactive security against scam calls, phishing links, and malicious messages.",
-                color = TextSecondary,
+                "Guardian Defense",
+                fontSize = 30.sp,
+                fontWeight = FontWeight.Bold,
+                color = GxTextHi
+            )
+            Text(
+                "Next-generation AI security defending calls, phishing links, and extortive messages in 10+ Indic languages.",
+                color = GxTextMid,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 modifier = Modifier.padding(top = 6.dp, bottom = 28.dp)
@@ -125,10 +171,10 @@ fun AuthScreen(onContinue: (String) -> Unit) {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Full Name") },
+                label = { Text("Your Name", color = GxTextLo) },
                 singleLine = true,
-                colors = customTextFieldColors(),
-                shape = RoundedCornerShape(12.dp),
+                colors = customGxTextFieldColors(),
+                shape = GxShapeMd,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -137,10 +183,10 @@ fun AuthScreen(onContinue: (String) -> Unit) {
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
-                label = { Text("Email Address") },
+                label = { Text("Email Address", color = GxTextLo) },
                 singleLine = true,
-                colors = customTextFieldColors(),
-                shape = RoundedCornerShape(12.dp),
+                colors = customGxTextFieldColors(),
+                shape = GxShapeMd,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -149,43 +195,32 @@ fun AuthScreen(onContinue: (String) -> Unit) {
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("Master PIN / Password") },
+                label = { Text("Security PIN / Password", color = GxTextLo) },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
-                colors = customTextFieldColors(),
-                shape = RoundedCornerShape(12.dp),
+                colors = customGxTextFieldColors(),
+                shape = GxShapeMd,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(Modifier.height(24.dp))
 
-            Button(
+            GxButton.Primary(
+                text = "Launch Security Hub",
                 onClick = { onContinue(name.trim().ifBlank { "User" }) },
                 enabled = email.isNotBlank() && password.length >= 4,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = CyberEmerald,
-                    contentColor = Color(0xFF022C22),
-                    disabledContainerColor = DarkSurfaceElevated,
-                    disabledContentColor = TextMuted
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-            ) {
-                Text("Launch Protection", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(8.dp))
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
-            }
+                icon = Icons.AutoMirrored.Filled.ArrowForward,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(Modifier.height(18.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Lock, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp))
+                Icon(Icons.Default.Lock, contentDescription = null, tint = GxTextLo, modifier = Modifier.size(13.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    "On-device encrypted sandbox. Zero telemetric logging.",
-                    color = TextMuted,
+                    "On-device zero-telemetry sandbox. Encrypted session state.",
+                    color = GxTextLo,
                     fontSize = 11.sp
                 )
             }
@@ -194,439 +229,377 @@ fun AuthScreen(onContinue: (String) -> Unit) {
 }
 
 // ==========================================
-// 2. ONBOARDING SCREEN
-// ==========================================
-// ==========================================
-// 2. 5-POINT PERMISSION ONBOARDING SCREEN
+// 2. 5-STEP ONBOARDING PAGER (Premium Linear Flow)
 // ==========================================
 @Composable
 fun OnboardingScreen(name: String, onComplete: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
+    var currentStep by remember { mutableIntStateOf(0) }
 
+    // Permission States
     var hasMicPermission by remember {
         mutableStateOf(
-            androidx.core.content.ContextCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.RECORD_AUDIO
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
         )
     }
-
     var hasPhonePermission by remember {
         mutableStateOf(
-            androidx.core.content.ContextCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.READ_PHONE_STATE
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_PHONE_STATE) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
         )
     }
-
-    var hasNotificationPermission by remember {
-        mutableStateOf(
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                androidx.core.content.ContextCompat.checkSelfPermission(
-                    context,
-                    android.Manifest.permission.POST_NOTIFICATIONS
-                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            } else true
-        )
-    }
-
     var hasOverlayPermission by remember {
-        mutableStateOf(android.provider.Settings.canDrawOverlays(context))
+        mutableStateOf(Settings.canDrawOverlays(context))
     }
-
     var hasDefaultBrowser by remember {
         mutableStateOf(isDefaultBrowser(context))
     }
-
-    // Permission launchers
-    val micLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { granted -> hasMicPermission = granted }
-
-    val phoneLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { granted -> hasPhonePermission = granted }
-
-    val notifLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { granted -> hasNotificationPermission = granted }
-
+    var hasNotificationPermission by remember {
+        mutableStateOf(
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else true
+        )
+    }
     var hasCallControlPermission by remember {
         mutableStateOf(
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                androidx.core.content.ContextCompat.checkSelfPermission(
-                    context,
-                    android.Manifest.permission.ANSWER_PHONE_CALLS
-                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                ContextCompat.checkSelfPermission(context, android.Manifest.permission.ANSWER_PHONE_CALLS) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
             } else true
         )
     }
 
-    val callControlLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    val micLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> hasMicPermission = granted }
+
+    val phoneLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> hasPhonePermission = granted }
+
+    val notifLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> hasNotificationPermission = granted }
+
+    val callControlLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
     ) { granted -> hasCallControlPermission = granted }
 
-    // Re-check permissions when returning from Settings
-    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
-        hasOverlayPermission = android.provider.Settings.canDrawOverlays(context)
-        hasDefaultBrowser = isDefaultBrowser(context)
-        onPauseOrDispose {}
+    var selectedLang by remember {
+        mutableStateOf(
+            context.getSharedPreferences("guardian_prefs", Context.MODE_PRIVATE)
+                .getString("preferred_language", "hi") ?: "hi"
+        )
     }
-
-    val allGranted = hasMicPermission && hasPhonePermission && hasOverlayPermission && hasDefaultBrowser && hasNotificationPermission
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
-            .padding(20.dp)
+            .background(GxBase)
+            .padding(24.dp)
     ) {
-        LazyColumn(
+        Column(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            item {
-                Spacer(Modifier.height(10.dp))
-                Surface(
-                    color = CyberEmeraldGlow,
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.5f)),
-                    modifier = Modifier.size(52.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = null,
-                            tint = CyberEmerald,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                Text("Security Setup", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
-                Text(
-                    "Welcome, $name. Enable Guardian's real-time interception layers to activate total on-device protection.",
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
-                )
-            }
-
-            // 1. Microphone
-            item {
-                PermissionCheckRow(
-                    title = "1. Microphone Access",
-                    detail = "Enables real-time speakerphone speech-to-text to detect extortion and digital arrest on calls.",
-                    isGranted = hasMicPermission,
-                    onGrant = { micLauncher.launch(android.Manifest.permission.RECORD_AUDIO) }
-                )
-            }
-
-            // 2. Phone State
-            item {
-                PermissionCheckRow(
-                    title = "2. Phone Call State",
-                    detail = "Auto-detects incoming and active calls to trigger Guardian's security reasoning card.",
-                    isGranted = hasPhonePermission,
-                    onGrant = { phoneLauncher.launch(android.Manifest.permission.READ_PHONE_STATE) }
-                )
-            }
-
-            // 3. Display Over Other Apps
-            item {
-                PermissionCheckRow(
-                    title = "3. Floating Screen Overlay",
-                    detail = "Allows Guardian to show the live AI reasoning card on top of calls and phishing links.",
-                    isGranted = hasOverlayPermission,
-                    onGrant = {
-                        val intent = android.content.Intent(
-                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            android.net.Uri.parse("package:${context.packageName}")
-                        )
-                        context.startActivity(intent)
-                    }
-                )
-            }
-
-            // 4. Default Browser Protection (Link Interception)
-            item {
-                PermissionCheckRow(
-                    title = "4. Set as Default Browser",
-                    detail = "Routes clicked links in WhatsApp, SMS & Gmail through Guardian's anti-phishing shield before opening.",
-                    isGranted = hasDefaultBrowser,
-                    onGrant = {
-                        try {
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                                val roleManager = context.getSystemService(android.content.Context.ROLE_SERVICE) as? android.app.role.RoleManager
-                                if (roleManager != null && roleManager.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)) {
-                                    val roleIntent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER)
-                                    context.startActivity(roleIntent)
-                                } else {
-                                    val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-                                    context.startActivity(intent)
-                                }
-                            } else {
-                                val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-                                context.startActivity(intent)
-                            }
-                        } catch (_: Exception) {
-                            val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-                            try {
-                                context.startActivity(intent)
-                            } catch (_: Exception) {
-                                val appDetails = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = android.net.Uri.parse("package:${context.packageName}")
-                                }
-                                context.startActivity(appDetails)
-                            }
-                        }
-                    }
-                )
-            }
-
-            // 5. Notifications
-            item {
-                PermissionCheckRow(
-                    title = "5. Notification Alerts",
-                    detail = "Displays high-priority heads-up warnings during active scam calls and phishing attempts.",
-                    isGranted = hasNotificationPermission,
-                    onGrant = {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                            notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            hasNotificationPermission = true
-                        }
-                    }
-                )
-            }
-
-            // 6. Instant Call Interception & Termination
-            item {
-                PermissionCheckRow(
-                    title = "6. Active Call Protection & End Call",
-                    detail = "Empowers Guardian to instantly disconnect calls when severe scam or extortion is detected.",
-                    isGranted = hasCallControlPermission,
-                    onGrant = {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                            callControlLauncher.launch(android.Manifest.permission.ANSWER_PHONE_CALLS)
-                        } else {
-                            hasCallControlPermission = true
-                        }
-                    }
-                )
-            }
-
-            // 7. Choose Scam Warning Language (Bhashini AI)
-            item {
-                val languages = listOf(
-                    "hi" to "Hindi (हिंदी)",
-                    "en" to "English",
-                    "ta" to "Tamil (தமிழ்)",
-                    "te" to "Telugu (తెలుగు)",
-                    "bn" to "Bengali (বাংলা)",
-                    "mr" to "Marathi (मराठी)",
-                    "kn" to "Kannada (ಕನ್ನಡ)",
-                    "ml" to "Malayalam (മലയാളം)",
-                    "gu" to "Gujarati (ગુજરાતી)",
-                    "pa" to "Punjabi (ਪੰਜਾਬੀ)"
-                )
-                var currentSelectedLang by remember {
-                    mutableStateOf(
-                        context.getSharedPreferences("guardian_prefs", android.content.Context.MODE_PRIVATE)
-                            .getString("preferred_language", "hi") ?: "hi"
+            // Header Progress Dots
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                for (i in 0 until 4) {
+                    val isActive = i == currentStep
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .size(if (isActive) 24.dp else 8.dp, 6.dp)
+                            .clip(GxShapePill)
+                            .background(if (isActive) GxPrimary else GxBorder)
                     )
                 }
+            }
 
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.4f))
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp)
-                    ) {
+            // Step Content Area
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 20.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                when (currentStep) {
+                    // Step 0: Welcome
+                    0 -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Surface(
+                            color = GxPrimarySoft,
+                            shape = GxShapeMd,
+                            border = BorderStroke(1.dp, GxPrimary.copy(alpha = 0.4f)),
+                            modifier = Modifier.size(60.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Shield, contentDescription = null, tint = GxPrimary, modifier = Modifier.size(32.dp))
+                            }
+                        }
                         Text(
-                            "7. Scam Warning Language",
+                            "Protection that speaks your language",
+                            fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = TextPrimary
+                            color = GxTextHi,
+                            lineHeight = 34.sp
                         )
                         Text(
-                            "Choose your language for live scam call warnings and Bhashini AI audio alerts.",
-                            color = TextSecondary,
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp,
-                            modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
+                            "Hello $name. Guardian detects scam calls, coercive extortion, and phishing links in real time across Hindi, English, and 10+ Indian regional languages.",
+                            color = GxTextMid,
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp
+                        )
+                    }
+
+                    // Step 1: Real-Time Interception Permissions
+                    1 -> LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        item {
+                            Text("Security Layers", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = GxTextHi)
+                            Text(
+                                "Grant core hardware hooks so Guardian can protect your device.",
+                                color = GxTextMid,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+                            )
+                        }
+                        item {
+                            OnboardingPermRow(
+                                title = "1. Microphone Speech-to-Text",
+                                desc = "Real-time acoustic analysis of speakerphone calls for extortion and digital arrest threats.",
+                                isGranted = hasMicPermission,
+                                onGrant = { micLauncher.launch(android.Manifest.permission.RECORD_AUDIO) }
+                            )
+                        }
+                        item {
+                            OnboardingPermRow(
+                                title = "2. Phone Call Telephony",
+                                desc = "Auto-triggers the AI Reasoning Card as soon as a call is ringing or answered.",
+                                isGranted = hasPhonePermission,
+                                onGrant = { phoneLauncher.launch(android.Manifest.permission.READ_PHONE_STATE) }
+                            )
+                        }
+                        item {
+                            OnboardingPermRow(
+                                title = "3. Floating Heads-Up Overlay",
+                                desc = "Renders the live risk telemetry over the stock dialer and messaging apps.",
+                                isGranted = hasOverlayPermission,
+                                onGrant = {
+                                    val intent = Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                    context.startActivity(intent)
+                                }
+                            )
+                        }
+                        item {
+                            OnboardingPermRow(
+                                title = "4. Call Control & Auto-Hangup",
+                                desc = "Allows one-tap emergency call termination when severe fraud (score >= 85%) is detected.",
+                                isGranted = hasCallControlPermission,
+                                onGrant = {
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                        callControlLauncher.launch(android.Manifest.permission.ANSWER_PHONE_CALLS)
+                                    } else {
+                                        hasCallControlPermission = true
+                                    }
+                                }
+                            )
+                        }
+                        item {
+                            OnboardingPermRow(
+                                title = "5. Notification Alerts",
+                                desc = "Displays critical scam heads-up warnings during active attacks.",
+                                isGranted = hasNotificationPermission,
+                                onGrant = {
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                        notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        hasNotificationPermission = true
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    // Step 2: Language Picker
+                    2 -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text("Scam Warning Language", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = GxTextHi)
+                        Text(
+                            "Select the language you want Guardian's Bhashini AI voice alerts and reasoning card explanations in:",
+                            color = GxTextMid,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+
+                        val languages = listOf(
+                            "hi" to "Hindi (हिंदी)",
+                            "en" to "English",
+                            "ta" to "Tamil (தமிழ்)",
+                            "te" to "Telugu (తెలుగు)",
+                            "bn" to "Bengali (বাংলা)",
+                            "mr" to "Marathi (मराठी)",
+                            "kn" to "Kannada (ಕನ್ನಡ)",
+                            "ml" to "Malayalam (മലയാളം)",
+                            "gu" to "Gujarati (ગુજરાતી)",
+                            "pa" to "Punjabi (ਪੰਜਾਬੀ)"
                         )
 
                         @OptIn(ExperimentalLayoutApi::class)
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             languages.forEach { (code, label) ->
-                                val isSelected = currentSelectedLang == code
-                                FilterChip(
-                                    selected = isSelected,
+                                val isSelected = selectedLang == code
+                                GxChip(
+                                    text = label,
+                                    variant = if (isSelected) GxChipVariant.Brand else GxChipVariant.Neutral,
+                                    height = 36.dp,
                                     onClick = {
-                                        currentSelectedLang = code
-                                        context.getSharedPreferences("guardian_prefs", android.content.Context.MODE_PRIVATE)
+                                        selectedLang = code
+                                        context.getSharedPreferences("guardian_prefs", Context.MODE_PRIVATE)
                                             .edit()
                                             .putString("preferred_language", code)
                                             .apply()
-                                    },
-                                    label = {
-                                        Text(
-                                            label,
-                                            fontSize = 11.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = CyberEmerald,
-                                        selectedLabelColor = Color(0xFF022C22),
-                                        containerColor = DarkSurface,
-                                        labelColor = TextSecondary
-                                    ),
-                                    border = FilterChipDefaults.filterChipBorder(
-                                        borderColor = if (isSelected) CyberEmerald else BorderSubtle,
-                                        selectedBorderColor = CyberEmerald,
-                                        enabled = true,
-                                        selected = isSelected
-                                    )
+                                    }
                                 )
                             }
                         }
                     }
+
+                    // Step 3: Finish Screen
+                    3 -> Column(
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Surface(
+                            color = GxSafeSoft,
+                            shape = CircleShape,
+                            border = BorderStroke(1.dp, GxSafe.copy(alpha = 0.5f)),
+                            modifier = Modifier.size(72.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = GxSafe, modifier = Modifier.size(36.dp))
+                            }
+                        }
+                        Text("You're Protected", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = GxTextHi)
+                        Text(
+                            "Dual-Engine AI (Gemini 1.5 Flash + Bhashini STT) is standing by in your secure on-device sandbox.",
+                            color = GxTextMid,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
                 }
             }
 
-            // Bottom Continue Action
-            item {
-                Spacer(Modifier.height(14.dp))
-                Button(
-                    onClick = onComplete,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = CyberEmerald,
-                        contentColor = Color(0xFF022C22),
-                        disabledContainerColor = DarkSurfaceElevated,
-                        disabledContentColor = TextMuted
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                ) {
-                    Text(
-                        if (allGranted) "Activate Guardian Defense" else "Continue to Dashboard",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
+            // Bottom Navigation Actions
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (currentStep > 0 && currentStep < 3) {
+                    TextButton(onClick = { currentStep-- }) {
+                        Text("Back", color = GxTextMid, fontSize = 14.sp)
+                    }
+                } else {
+                    Spacer(Modifier.width(8.dp))
+                }
+
+                if (currentStep < 3) {
+                    GxButton.Primary(
+                        text = if (currentStep == 0) "Get Started" else "Continue",
+                        onClick = { currentStep++ },
+                        icon = Icons.AutoMirrored.Filled.ArrowForward
+                    )
+                } else {
+                    GxButton.Primary(
+                        text = "Open Guardian Shield",
+                        onClick = onComplete,
+                        icon = Icons.Default.Shield,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
-                Spacer(Modifier.height(20.dp))
             }
         }
     }
 }
 
 @Composable
-private fun PermissionCheckRow(
+private fun OnboardingPermRow(
     title: String,
-    detail: String,
+    desc: String,
     isGranted: Boolean,
     onGrant: () -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (isGranted) DarkSurfaceElevated else DarkSurface
-        ),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(
-            1.dp,
-            if (isGranted) CyberEmerald.copy(alpha = 0.4f) else BorderSubtle
-        )
+    GxCard(
+        backgroundColor = if (isGranted) GxSurfaceAlt else GxSurface,
+        borderColor = if (isGranted) GxSafe.copy(alpha = 0.3f) else GxBorder,
+        contentPadding = 14.dp,
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                color = if (isGranted) CyberEmeraldGlow else DarkSurfaceVariant,
-                shape = CircleShape,
-                modifier = Modifier.size(36.dp)
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .background(if (isGranted) GxSafeSoft else GxSurfaceAlt, CircleShape),
+                contentAlignment = Alignment.Center
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    if (isGranted) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = CyberEmerald, modifier = Modifier.size(20.dp))
-                    } else {
-                        Icon(Icons.Default.WarningAmber, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(20.dp))
-                    }
-                }
+                Icon(
+                    if (isGranted) Icons.Default.CheckCircle else Icons.Default.WarningAmber,
+                    contentDescription = null,
+                    tint = if (isGranted) GxSafe else GxWarning,
+                    modifier = Modifier.size(18.dp)
+                )
             }
 
             Spacer(Modifier.width(12.dp))
 
             Column(Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
-                Text(
-                    detail,
-                    color = TextSecondary,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
+                Text(title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = GxTextHi)
+                Text(desc, color = GxTextLo, fontSize = 11.sp, lineHeight = 15.sp)
             }
 
             Spacer(Modifier.width(8.dp))
 
             if (isGranted) {
-                Surface(
-                    color = CyberEmeraldGlow,
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        "ACTIVE",
-                        color = CyberEmerald,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
+                GxChip(text = "ACTIVE", variant = GxChipVariant.Safe, height = 24.dp)
             } else {
-                Button(
+                GxButton.Primary(
+                    text = "Grant",
                     onClick = onGrant,
-                    colors = ButtonDefaults.buttonColors(containerColor = CyberEmerald, contentColor = Color(0xFF022C22)),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Grant", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
+                    height = 34.dp
+                )
             }
         }
     }
 }
 
-fun isDefaultBrowser(context: android.content.Context): Boolean {
-    return try {
-        val testIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://example.com"))
-        val resolver = context.packageManager
-        val defaultHandler = resolver.resolveActivity(testIntent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
-        defaultHandler?.activityInfo?.packageName == context.packageName
-    } catch (_: Exception) {
-        false
-    }
-}
-
 // ==========================================
-// 3. HOME SCREEN
+// 3. HOME SCREEN (Linear / Arc / 1Password Aesthetic)
 // ==========================================
 @Composable
 fun HomeScreen(
@@ -645,138 +618,180 @@ fun HomeScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 28.dp),
+            .background(GxBase),
+        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // User Header with Live Shield Status
+        // ----------------------------------------------------
+        // Status Hero (180dp height)
+        // ----------------------------------------------------
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            GxCard(
+                backgroundColor = GxSurface,
+                borderColor = if (state.protectionEnabled) GxPrimary.copy(alpha = 0.3f) else GxDanger.copy(alpha = 0.3f),
+                contentPadding = 20.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .gxFancyGlow()
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Hello, ${state.name}", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    Text("Personal Cyber Defense Hub", color = TextSecondary, fontSize = 13.sp)
-                }
-
-                Surface(
-                    color = if (state.protectionEnabled) CyberEmeraldGlow else Color(0xFF450A0A),
-                    shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(1.dp, if (state.protectionEnabled) CyberEmerald else CoralRed)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(if (state.protectionEnabled) CyberEmerald else CoralRed)
-                        )
-                        Spacer(Modifier.width(6.dp))
+                    Column(Modifier.weight(1f)) {
                         Text(
-                            if (state.protectionEnabled) "ACTIVE" else "PAUSED",
-                            color = if (state.protectionEnabled) CyberEmerald else CoralRed,
+                            "GUARDIAN DEFENSE",
+                            color = GxTextLo,
                             fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            if (state.protectionEnabled) "Protected" else "Protection Paused",
+                            color = GxTextHi,
+                            fontSize = 28.sp,
                             fontWeight = FontWeight.Bold
                         )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            if (state.protectionEnabled)
+                                "Real-time dual AI shield active · Zero threats detected"
+                            else "Interception listeners are currently in standby",
+                            color = GxTextMid,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
                     }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    GxRiskRing(
+                        riskScore = if (state.protectionEnabled) 12 else 85,
+                        size = 80.dp,
+                        strokeWidth = 6.dp,
+                        showLabel = false
+                    )
                 }
             }
         }
 
-        // Hero Master Shield Card
+        // ----------------------------------------------------
+        // Quick Actions Row (Horizontal Scroll)
+        // ----------------------------------------------------
         item {
-            MasterProtectionCard(
-                enabled = state.protectionEnabled,
-                onToggle = onToggle@{ enabled -> onProtectionChange(enabled) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                GxChip(
+                    text = "Scan QR",
+                    icon = Icons.Default.QrCodeScanner,
+                    variant = GxChipVariant.Brand,
+                    height = 42.dp,
+                    onClick = onOpenQrScanner
+                )
+                GxChip(
+                    text = "Check Link",
+                    icon = Icons.Default.Link,
+                    variant = GxChipVariant.Neutral,
+                    height = 42.dp,
+                    onClick = { showLinkCheckDialog = true }
+                )
+                GxChip(
+                    text = "Scam History",
+                    icon = Icons.Default.History,
+                    variant = GxChipVariant.Neutral,
+                    height = 42.dp,
+                    onClick = onOpenCallHistory
+                )
+                GxChip(
+                    text = "Report Incident",
+                    icon = Icons.Default.WarningAmber,
+                    variant = GxChipVariant.Warning,
+                    height = 42.dp,
+                    onClick = { showIncidentDialog = true }
+                )
+            }
+        }
+
+        // ----------------------------------------------------
+        // Section Header: "Protection Modules"
+        // ----------------------------------------------------
+        item {
+            Text(
+                "PROTECTION MODULES",
+                color = GxTextLo,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp,
+                modifier = Modifier.padding(top = 4.dp)
             )
         }
 
-        // Quick Actions Grid (Phone Guard, Scam History, Scan QR, Check Link)
+        // ----------------------------------------------------
+        // 6 Vertical Feature Cards (Linear Aesthetic)
+        // ----------------------------------------------------
         item {
-            Text("Proactive Defense Modules", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
-        }
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                QuickActionCard(
-                    title = "Speaker Guard",
-                    subtitle = "Live Call STT",
-                    icon = Icons.Default.PhoneInTalk,
-                    accentColor = CyberEmerald,
-                    onClick = onOpenCallRisk,
-                    modifier = Modifier.weight(1f)
-                )
-                QuickActionCard(
-                    title = "Scam History",
-                    subtitle = "Call Audit Log",
-                    icon = Icons.Default.History,
-                    accentColor = CoralRed,
-                    onClick = onOpenCallHistory,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                QuickActionCard(
-                    title = "Scan QR",
-                    subtitle = "Camera ML Shield",
-                    icon = Icons.Default.QrCodeScanner,
-                    accentColor = ElectricIndigo,
-                    onClick = onOpenQrScanner,
-                    modifier = Modifier.weight(1f)
-                )
-                QuickActionCard(
-                    title = "Link Shield",
-                    subtitle = "Scan URL",
-                    icon = Icons.Default.Link,
-                    accentColor = AmberWarning,
-                    onClick = { showLinkCheckDialog = true },
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            FeatureCardItem(
+                title = "Live Call Speaker Guard",
+                subtitle = "Bhashini STT + Gemini reasoning with tone & TTS warning",
+                icon = Icons.Default.PhoneInTalk,
+                accentColor = GxPrimary,
+                onClick = onOpenCallRisk
+            )
         }
 
-        // Recent Activity Feed
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Recent Security Checks", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
-                Spacer(Modifier.weight(1f))
-                Text("${state.events.size} logged", color = CyberEmerald, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            }
+            FeatureCardItem(
+                title = "Camera QR Vision Shield",
+                subtitle = "Real-time ML Kit scanner to prevent malicious UPI/URL redirects",
+                icon = Icons.Default.QrCodeScanner,
+                accentColor = GxSafe,
+                onClick = onOpenQrScanner
+            )
         }
 
-        items(state.events.take(4)) { event ->
-            EventRowItem(event)
+        item {
+            FeatureCardItem(
+                title = "Link Shield Interceptor",
+                subtitle = "Default browser protection routing clicked URLs through AI verification",
+                icon = Icons.Default.Link,
+                accentColor = GxWarning,
+                onClick = { showLinkCheckDialog = true }
+            )
         }
 
-        // Report Incident Trigger Button
         item {
-            OutlinedButton(
-                onClick = { showIncidentDialog = true },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = CoralRed),
-                border = BorderStroke(1.dp, CoralRed.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                Icon(Icons.Default.WarningAmber, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Report Suspicious Incident / Number", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            }
+            FeatureCardItem(
+                title = "Scam Call Audit Log",
+                subtitle = "Chronological threat records & one-tap 1930 Cybercrime filing",
+                icon = Icons.Default.History,
+                accentColor = GxDanger,
+                onClick = onOpenCallHistory
+            )
+        }
+
+        item {
+            FeatureCardItem(
+                title = "Call Screening & Auto-Block",
+                subtitle = "Telecom service rejecting blacklisted scam and extortion numbers",
+                icon = Icons.Default.Block,
+                accentColor = GxPrimary,
+                onClick = onOpenCallHistory
+            )
+        }
+
+        // Master Shield Toggle Button
+        item {
+            GxButton.Ghost(
+                text = if (state.protectionEnabled) "Pause Guardian Protection" else "Activate Guardian Protection",
+                onClick = { onProtectionChange(!state.protectionEnabled) },
+                icon = Icons.Default.Shield,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 
@@ -800,150 +815,52 @@ fun HomeScreen(
     }
 }
 
-// Master Protection Banner Card
 @Composable
-private fun MasterProtectionCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (enabled) DarkSurfaceElevated else Color(0xFF2A1515)
-        ),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, if (enabled) CyberEmerald.copy(alpha = 0.3f) else CoralRed.copy(alpha = 0.3f))
+private fun FeatureCardItem(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    GxCard(
+        backgroundColor = GxSurface,
+        borderColor = GxBorder,
+        contentPadding = 16.dp,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                color = if (enabled) CyberEmeraldGlow else Color(0xFF450A0A),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.size(48.dp)
+                color = accentColor.copy(alpha = 0.12f),
+                shape = GxShapeMd,
+                border = BorderStroke(1.dp, accentColor.copy(alpha = 0.25f)),
+                modifier = Modifier.size(42.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        if (enabled) Icons.Default.Shield else Icons.Default.WarningAmber,
-                        contentDescription = null,
-                        tint = if (enabled) CyberEmerald else CoralRed,
-                        modifier = Modifier.size(26.dp)
-                    )
+                    Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(20.dp))
                 }
             }
 
             Spacer(Modifier.width(14.dp))
 
             Column(Modifier.weight(1f)) {
-                Text(
-                    if (enabled) "Proactive Shield Running" else "Protection in Standby",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = TextPrimary
-                )
-                Text(
-                    if (enabled) "Continuous background call, notification & link screening."
-                    else "Tap to reactivate real-time scam interception.",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
+                Text(title, color = GxTextHi, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(2.dp))
+                Text(subtitle, color = GxTextLo, fontSize = 11.sp, lineHeight = 15.sp)
             }
 
-            Switch(
-                checked = enabled,
-                onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color(0xFF022C22),
-                    checkedTrackColor = CyberEmerald,
-                    uncheckedThumbColor = TextMuted,
-                    uncheckedTrackColor = DarkSurfaceVariant
-                )
+            Spacer(Modifier.width(8.dp))
+
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = GxTextLo,
+                modifier = Modifier.size(20.dp)
             )
-        }
-    }
-}
-
-// Quick Action Card Component
-@Composable
-private fun QuickActionCard(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    accentColor: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = DarkSurface),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, BorderSubtle),
-        modifier = modifier
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            horizontalAlignment = Alignment.Start
-        ) {
-            Surface(
-                color = accentColor.copy(alpha = 0.15f),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.size(38.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(20.dp))
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text(subtitle, fontSize = 11.sp, color = TextSecondary)
-        }
-    }
-}
-
-// Event Row Item
-@Composable
-private fun EventRowItem(event: GuardianEvent) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = DarkSurface),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, BorderSubtle)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(if (event.safe) CyberEmerald else CoralRed)
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(event.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
-                    Spacer(Modifier.width(6.dp))
-                    Surface(
-                        color = DarkSurfaceVariant,
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        Text(
-                            event.category,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextMuted,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-                Text(event.detail, color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
-            }
-            Text(event.time, color = TextMuted, fontSize = 11.sp)
         }
     }
 }
@@ -953,52 +870,56 @@ private fun EventRowItem(event: GuardianEvent) {
 // ==========================================
 @Composable
 fun EventsScreen(events: List<GuardianEvent>, contentPadding: PaddingValues) {
-    var filterSafe by remember { mutableStateOf<Boolean?>(null) }
-    val filteredList = events.filter { filterSafe == null || it.safe == filterSafe }
-
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground),
+            .background(GxBase),
         contentPadding = PaddingValues(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
-            Text("Security Audit Timeline", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text("Full chronological record of checks, scans, and detections.", color = TextSecondary, fontSize = 13.sp)
+            Text("Security Audit Log", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = GxTextHi)
+            Text("Chronological record of background telemetry checks.", color = GxTextMid, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
         }
 
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = filterSafe == null,
-                    onClick = { filterSafe = null },
-                    label = { Text("All (${events.size})", fontSize = 12.sp) },
-                    colors = customFilterChipColors()
-                )
-                FilterChip(
-                    selected = filterSafe == true,
-                    onClick = { filterSafe = true },
-                    label = { Text("Safe", fontSize = 12.sp) },
-                    colors = customFilterChipColors()
-                )
-                FilterChip(
-                    selected = filterSafe == false,
-                    onClick = { filterSafe = false },
-                    label = { Text("Threats Flagged", fontSize = 12.sp) },
-                    colors = customFilterChipColors()
-                )
+        if (events.isEmpty()) {
+            item {
+                GxCard(modifier = Modifier.fillMaxWidth()) {
+                    Text("No security events logged yet.", color = GxTextLo, fontSize = 13.sp)
+                }
             }
-        }
-
-        items(filteredList) { event ->
-            EventRowItem(event)
+        } else {
+            items(events) { event ->
+                GxCard(
+                    backgroundColor = GxSurface,
+                    contentPadding = 14.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        GxLiveDot(
+                            color = if (event.safe) GxSafe else GxDanger,
+                            size = 8.dp,
+                            pulsing = false
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(event.title, color = GxTextHi, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text(event.detail, color = GxTextMid, fontSize = 12.sp)
+                        }
+                        Text(event.time, color = GxTextLo, fontSize = 11.sp)
+                    }
+                }
+            }
         }
     }
 }
 
 // ==========================================
-// 5. INCIDENTS SCREEN
+// 5. INCIDENTS SCREEN (Threat Log)
 // ==========================================
 @Composable
 fun IncidentsScreen(
@@ -1006,104 +927,78 @@ fun IncidentsScreen(
     contentPadding: PaddingValues,
     onAddIncident: (GuardianIncident) -> Unit
 ) {
-    var showDialog by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground),
+            .background(GxBase),
         contentPadding = PaddingValues(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Threats & Incidents", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    Text("Review confirmed fraud attempts and reported calls.", color = TextSecondary, fontSize = 13.sp)
+                    Text("Threat Log", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = GxTextHi)
+                    Text("Flagged scams, extortions, and blocked callers.", color = GxTextMid, fontSize = 13.sp)
                 }
-                IconButton(onClick = { showDialog = true }) {
-                    Icon(Icons.Default.WarningAmber, contentDescription = "Report", tint = CoralRed)
-                }
+                GxButton.Primary(
+                    text = "Report",
+                    onClick = { showAddDialog = true },
+                    height = 38.dp
+                )
             }
         }
 
         if (incidents.isEmpty()) {
             item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, BorderSubtle),
-                    modifier = Modifier.padding(top = 20.dp)
+                GxCard(
+                    backgroundColor = GxSurface,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(28.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
                     ) {
-                        Surface(
-                            color = CyberEmeraldGlow,
-                            shape = CircleShape,
-                            modifier = Modifier.size(52.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = CyberEmerald, modifier = Modifier.size(28.dp))
-                            }
-                        }
-                        Spacer(Modifier.height(14.dp))
-                        Text("No Active Threat Incidents", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = TextPrimary)
-                        Text(
-                            "Your device is completely clean. Any flagged scam calls or malicious links will appear here for review.",
-                            color = TextSecondary,
-                            fontSize = 13.sp,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
+                        Icon(Icons.Default.Shield, contentDescription = null, tint = GxSafe, modifier = Modifier.size(40.dp))
+                        Spacer(Modifier.height(10.dp))
+                        Text("No threats logged", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = GxTextHi)
+                        Text("Your phone is currently clear of flagged extortion attempts.", color = GxTextLo, fontSize = 12.sp)
                     }
                 }
             }
         } else {
             items(incidents) { incident ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, CoralRed.copy(alpha = 0.4f))
+                GxCard(
+                    backgroundColor = GxDangerSoft,
+                    borderColor = GxDanger.copy(alpha = 0.4f),
+                    contentPadding = 14.dp,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(incident.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary, modifier = Modifier.weight(1f))
-                            Surface(
-                                color = Color(0xFF450A0A),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    incident.risk,
-                                    color = CoralRed,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(incident.title, color = GxTextHi, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(incident.detail, color = GxTextMid, fontSize = 12.sp)
                         }
-                        Text(incident.detail, color = TextSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(incident.threatType, color = AmberWarning, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.weight(1f))
-                            Text(incident.time, color = TextMuted, fontSize = 11.sp)
-                        }
+                        GxChip(text = incident.risk, variant = GxChipVariant.Danger, height = 24.dp)
                     }
                 }
             }
         }
     }
 
-    if (showDialog) {
+    if (showAddDialog) {
         IncidentReportModal(
-            onDismiss = { showDialog = false },
+            onDismiss = { showAddDialog = false },
             onSave = {
                 onAddIncident(it)
-                showDialog = false
+                showAddDialog = false
             }
         )
     }
@@ -1120,443 +1015,306 @@ fun SettingsScreen(
     contentPadding: PaddingValues,
     onToggle: (SettingType, Boolean) -> Unit,
     onDeleteData: () -> Unit,
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit
 ) {
-    var confirmDelete by remember { mutableStateOf(false) }
-    var confirmLogout by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var currentLang by remember {
+        mutableStateOf(
+            context.getSharedPreferences("guardian_prefs", Context.MODE_PRIVATE)
+                .getString("preferred_language", "hi") ?: "hi"
+        )
+    }
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground),
+            .background(GxBase),
         contentPadding = PaddingValues(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Text("Security Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text("Customize active screening layers and privacy controls.", color = TextSecondary, fontSize = 13.sp)
+            Text("Settings & Sensors", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = GxTextHi)
+            Text("Configure proactive detection engines and privacy preferences.", color = GxTextMid, fontSize = 13.sp)
         }
 
         item {
-            SettingRowCard(
-                title = "All Protection Layers",
-                detail = "Toggle all active interception shields simultaneously",
-                checked = state.protectionEnabled,
-                icon = Icons.Default.Shield,
-                onCheckedChange = { onToggle(SettingType.All, it) }
-            )
-        }
+            GxCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("Interception Channels", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = GxTextHi)
 
-        item {
-            SettingRowCard(
-                title = "Phone Call Screening",
-                detail = "Auto-trigger speakerphone analyzer on connected calls",
-                checked = state.phoneProtection,
-                icon = Icons.Default.PhoneInTalk,
-                onCheckedChange = { onToggle(SettingType.Phone, it) }
-            )
-        }
+                    SettingToggleRow(
+                        title = "Live Call STT Analyzer",
+                        desc = "Monitor live speakerphone speech for scams",
+                        enabled = state.phoneProtection,
+                        onToggle = { onToggle(SettingType.Phone, it) }
+                    )
 
-        item {
-            SettingRowCard(
-                title = "Message & WhatsApp Shield",
-                detail = "Real-time notification listener for OTP, KYC, and power cut fraud",
-                checked = state.messageProtection,
-                icon = Icons.Default.NotificationsActive,
-                onCheckedChange = { onToggle(SettingType.Messages, it) }
-            )
-        }
+                    SettingToggleRow(
+                        title = "SMS & Notification Shield",
+                        desc = "Detect urgent extortion in WhatsApp & SMS",
+                        enabled = state.messageProtection,
+                        onToggle = { onToggle(SettingType.Messages, it) }
+                    )
 
-        item {
-            SettingRowCard(
-                title = "Link & QR Interceptor",
-                detail = "Validate URLs against threat intelligence before opening",
-                checked = state.linkProtection,
-                icon = Icons.Default.Link,
-                onCheckedChange = { onToggle(SettingType.Links, it) }
-            )
-        }
-
-        item {
-            Spacer(Modifier.height(10.dp))
-            Card(
-                colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, BorderSubtle)
-            ) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Security, contentDescription = null, tint = CyberEmerald, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Privacy Guarantee (DPDP Compliant)", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
-                    }
-                    Text(
-                        "Guardian processes all speech, notification text, and camera frames locally in RAM. No voice recordings or text logs are uploaded to any external server.",
-                        color = TextSecondary,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        modifier = Modifier.padding(top = 6.dp)
+                    SettingToggleRow(
+                        title = "Anti-Phishing Link Shield",
+                        desc = "Pre-screen clicked links before opening browser",
+                        enabled = state.linkProtection,
+                        onToggle = { onToggle(SettingType.Links, it) }
                     )
                 }
             }
         }
 
         item {
-            OutlinedButton(
-                onClick = { confirmDelete = true },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = AmberWarning),
-                border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Erase Local Cache & Incident Logs", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            GxCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Language Preference (Bhashini AI)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = GxTextHi)
+                    Text("Select warning and reasoning language:", color = GxTextLo, fontSize = 12.sp)
+
+                    val languages = listOf(
+                        "hi" to "Hindi", "en" to "English", "ta" to "Tamil", "te" to "Telugu",
+                        "bn" to "Bengali", "mr" to "Marathi", "kn" to "Kannada", "ml" to "Malayalam"
+                    )
+
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        languages.forEach { (code, label) ->
+                            val isSelected = currentLang == code
+                            GxChip(
+                                text = label,
+                                variant = if (isSelected) GxChipVariant.Brand else GxChipVariant.Neutral,
+                                onClick = {
+                                    currentLang = code
+                                    context.getSharedPreferences("guardian_prefs", Context.MODE_PRIVATE)
+                                        .edit()
+                                        .putString("preferred_language", code)
+                                        .apply()
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
 
         item {
-            Button(
-                onClick = { confirmLogout = true },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF450A0A), contentColor = CoralRed),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Log Out & Clear Master Session", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            containerColor = DarkSurfaceElevated,
-            title = { Text("Erase Local Session Data?", color = TextPrimary) },
-            text = { Text("This will permanently clear in-memory event logs and reported incidents.", color = TextSecondary) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDelete = false
-                    onDeleteData()
-                }) { Text("Erase", color = CoralRed, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text("Cancel", color = TextSecondary) }
-            }
-        )
-    }
-
-    if (confirmLogout) {
-        AlertDialog(
-            onDismissRequest = { confirmLogout = false },
-            containerColor = DarkSurfaceElevated,
-            title = { Text("Log Out from Guardian?", color = TextPrimary) },
-            text = { Text("Your encrypted master session will be wiped and you will need to re-authenticate on next launch.", color = TextSecondary) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmLogout = false
-                    onLogout()
-                }) { Text("Log Out", color = CoralRed, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmLogout = false }) { Text("Cancel", color = TextSecondary) }
-            }
-        )
-    }
-}
-
-@Composable
-private fun SettingRowCard(
-    title: String,
-    detail: String,
-    checked: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = DarkSurface),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, BorderSubtle)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                color = if (checked) CyberEmeraldGlow else DarkSurfaceVariant,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = if (checked) CyberEmerald else TextMuted, modifier = Modifier.size(22.dp))
-                }
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary)
-                Text(detail, color = TextSecondary, fontSize = 12.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp))
-            }
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color(0xFF022C22),
-                    checkedTrackColor = CyberEmerald,
-                    uncheckedThumbColor = TextMuted,
-                    uncheckedTrackColor = DarkSurfaceVariant
-                )
+            GxButton.Ghost(
+                text = "Sign Out & Reset Session",
+                onClick = onLogout,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
 }
 
+@Composable
+private fun SettingToggleRow(
+    title: String,
+    desc: String,
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = GxTextHi, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text(desc, color = GxTextLo, fontSize = 11.sp)
+        }
+        Switch(
+            checked = enabled,
+            onCheckedChange = onToggle,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = GxVoid,
+                checkedTrackColor = GxPrimary,
+                uncheckedThumbColor = GxTextLo,
+                uncheckedTrackColor = GxSurfaceAlt
+            )
+        )
+    }
+}
+
 // ==========================================
-// 7. INTERACTIVE MODALS (QR, Link, Incident)
+// 7. MODALS
 // ==========================================
 @Composable
-private fun LinkCheckerModal(onDismiss: () -> Unit) {
+fun LinkCheckerModal(onDismiss: () -> Unit) {
     var url by remember { mutableStateOf("") }
-    var scanResult by remember { mutableStateOf<String?>(null) }
-    var isSafe by remember { mutableStateOf(true) }
+    var report by remember { mutableStateOf<RiskReport?>(null) }
+    var isChecking by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
-    AlertDialog(
+    androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DarkSurfaceElevated,
-        shape = RoundedCornerShape(18.dp),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Link, contentDescription = null, tint = AmberWarning)
-                Spacer(Modifier.width(8.dp))
-                Text("Link Safety Inspector", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-        },
+        containerColor = GxSurface,
+        titleContentColor = GxTextHi,
+        textContentColor = GxTextMid,
+        title = { Text("Link Shield Inspector", fontWeight = FontWeight.Bold) },
         text = {
-            Column {
-                Text("Enter or paste any suspicious web address:", color = TextSecondary, fontSize = 13.sp)
-                Spacer(Modifier.height(10.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Paste any suspicious URL to inspect against phishing and malicious download databases.", fontSize = 12.sp, color = GxTextLo)
                 OutlinedTextField(
                     value = url,
-                    onValueChange = {
-                        url = it
-                        scanResult = null
-                    },
-                    placeholder = { Text("https://example-bank-login.xyz") },
+                    onValueChange = { url = it },
+                    placeholder = { Text("https://...", color = GxTextLo) },
                     singleLine = true,
-                    colors = customTextFieldColors(),
-                    shape = RoundedCornerShape(10.dp),
+                    colors = customGxTextFieldColors(),
+                    shape = GxShapeMd,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (scanResult != null) {
-                    Spacer(Modifier.height(14.dp))
-                    Surface(
-                        color = if (isSafe) CyberEmeraldGlow else Color(0xFF450A0A),
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, if (isSafe) CyberEmerald else CoralRed)
+                if (report != null) {
+                    val r = report!!
+                    GxCard(
+                        backgroundColor = if (r.riskScore >= 70) GxDangerSoft else GxSafeSoft,
+                        contentPadding = 12.dp,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(Modifier.padding(12.dp)) {
+                        Column {
                             Text(
-                                if (isSafe) "✅ Domain Verified Safe" else "⚠️ High Risk Phishing URL Flagged",
+                                "Risk Score: ${r.riskScore}%",
+                                color = if (r.riskScore >= 70) GxDanger else GxSafe,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isSafe) CyberEmerald else CoralRed,
                                 fontSize = 14.sp
                             )
-                            Text(scanResult!!, color = TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                            Text(r.explanationEn, color = GxTextHi, fontSize = 12.sp)
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            Button(
+            GxButton.Primary(
+                text = if (isChecking) "Checking..." else "Analyze URL",
                 onClick = {
-                    val normalized = url.lowercase().trim()
-                    if (normalized.contains("free-gift") || normalized.contains("apk") || normalized.contains("login-kyc") || normalized.contains("rbi-claim")) {
-                        isSafe = false
-                        scanResult = "Suspicious phishing patterns detected. Known credential-harvesting endpoint."
-                    } else if (normalized.isNotBlank()) {
-                        isSafe = true
-                        scanResult = "No active malware signatures or blacklist match found."
+                    if (url.isNotBlank()) {
+                        isChecking = true
+                        report = RiskReport(
+                            riskScore = if (url.contains("apk") || url.contains("verify") || url.contains("free")) 88 else 10,
+                            explanationEn = if (url.contains("apk")) "Flagged: Attempting unauthorized APK sideload." else "URL appears clean."
+                        )
+                        isChecking = false
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = AmberWarning, contentColor = Color(0xFF2A1500))
-            ) { Text("Scan Link", fontWeight = FontWeight.Bold) }
+                height = 42.dp
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Close", color = TextSecondary) }
+            TextButton(onClick = onDismiss) { Text("Close", color = GxTextMid) }
         }
     )
 }
 
 @Composable
-private fun QrScannerModal(onDismiss: () -> Unit) {
-    var qrResult by remember { mutableStateOf<String?>(null) }
-    var isSafe by remember { mutableStateOf(true) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = DarkSurfaceElevated,
-        shape = RoundedCornerShape(18.dp),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = ElectricIndigo)
-                Spacer(Modifier.width(8.dp))
-                Text("Camera QR Safety Scanner", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-        },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Surface(
-                    color = DarkSurface,
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(2.dp, ElectricIndigo.copy(alpha = 0.5f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = ElectricIndigo, modifier = Modifier.size(48.dp))
-                            Spacer(Modifier.height(8.dp))
-                            Text("Aim camera at QR code", color = TextSecondary, fontSize = 12.sp)
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-                Text("Test Sample QR Payloads:", color = TextMuted, fontSize = 11.sp)
-                Spacer(Modifier.height(6.dp))
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            isSafe = false
-                            qrResult = "upi://pay?pa=scammer@fakeupi&am=5000 (Reverse Debit Scam: Attempting to debit ₹5000 instead of receiving money)"
-                        },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text("🚨 Reverse UPI QR", fontSize = 11.sp, color = CoralRed)
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            isSafe = true
-                            qrResult = "https://upi.org/verified-merchant (Clean verified payment QR)"
-                        },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text("✅ Safe Store QR", fontSize = 11.sp, color = CyberEmerald)
-                    }
-                }
-
-                if (qrResult != null) {
-                    Spacer(Modifier.height(12.dp))
-                    Surface(
-                        color = if (isSafe) CyberEmeraldGlow else Color(0xFF450A0A),
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, if (isSafe) CyberEmerald else CoralRed)
-                    ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(
-                                if (isSafe) "VERIFIED CLEAN QR" else "⚠️ FRAUDULENT QR DETECTED",
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSafe) CyberEmerald else CoralRed,
-                                fontSize = 13.sp
-                            )
-                            Text(qrResult!!, color = TextSecondary, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done", color = TextPrimary) }
-        }
-    )
-}
-
-@Composable
-private fun IncidentReportModal(
+fun IncidentReportModal(
     onDismiss: () -> Unit,
     onSave: (GuardianIncident) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var detail by remember { mutableStateOf("") }
-    var threatType by remember { mutableStateOf("Extortion / Police Scam") }
+    var risk by remember { mutableStateOf("High") }
 
-    AlertDialog(
+    androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DarkSurfaceElevated,
-        shape = RoundedCornerShape(18.dp),
-        title = { Text("Report Threat Incident", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+        containerColor = GxSurface,
+        titleContentColor = GxTextHi,
+        textContentColor = GxTextMid,
+        title = { Text("Report Threat / Scam Number", fontWeight = FontWeight.Bold) },
         text = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Caller Number or Organization") },
-                    placeholder = { Text("+91 98765 43210 or 'Fake CBI Officer'") },
+                    label = { Text("Phone Number / Threat Title", color = GxTextLo) },
                     singleLine = true,
-                    colors = customTextFieldColors(),
-                    shape = RoundedCornerShape(10.dp),
+                    colors = customGxTextFieldColors(),
+                    shape = GxShapeMd,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value = detail,
                     onValueChange = { detail = it },
-                    label = { Text("Incident Details & Demands") },
-                    placeholder = { Text("Demanded ₹50,000 for digital arrest avoidance...") },
-                    colors = customTextFieldColors(),
-                    shape = RoundedCornerShape(10.dp),
+                    label = { Text("Incident Details (e.g. impersonated CBI)", color = GxTextLo) },
+                    colors = customGxTextFieldColors(),
+                    shape = GxShapeMd,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         },
         confirmButton = {
-            Button(
+            GxButton.Primary(
+                text = "Save Incident",
                 onClick = {
-                    onSave(
-                        GuardianIncident(
-                            title = title.ifBlank { "Suspicious Call" },
-                            detail = detail.ifBlank { "Caller attempted social engineering fraud." },
-                            time = "Just now",
-                            risk = "HIGH RISK",
-                            threatType = threatType
+                    if (title.isNotBlank()) {
+                        onSave(
+                            GuardianIncident(
+                                title = title,
+                                detail = detail.ifBlank { "Flagged suspicious activity" },
+                                time = "Just now",
+                                risk = risk
+                            )
                         )
-                    )
+                    }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = CoralRed, contentColor = Color.White)
-            ) { Text("Save Incident", fontWeight = FontWeight.Bold) }
+                height = 42.dp
+            )
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = GxTextMid) }
+        }
     )
 }
 
 @Composable
-private fun customTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = CyberEmerald,
-    unfocusedBorderColor = BorderSubtle,
-    focusedLabelColor = CyberEmerald,
-    unfocusedLabelColor = TextSecondary,
-    focusedTextColor = TextPrimary,
-    unfocusedTextColor = TextPrimary,
-    cursorColor = CyberEmerald,
-    focusedContainerColor = DarkSurface,
-    unfocusedContainerColor = DarkSurface
-)
+fun QrScannerModal(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = GxSurface,
+        titleContentColor = GxTextHi,
+        title = { Text("QR Vision Shield") },
+        text = {
+            Text("Open the dedicated camera ML vision scanner to inspect QR codes for malware payloads.", color = GxTextMid)
+        },
+        confirmButton = {
+            GxButton.Primary(
+                text = "Launch Scanner",
+                onClick = {
+                    onDismiss()
+                    context.startActivity(Intent(context, QrScannerActivity::class.java))
+                },
+                height = 42.dp
+            )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = GxTextMid) }
+        }
+    )
+}
 
 @Composable
-private fun customFilterChipColors() = FilterChipDefaults.filterChipColors(
-    selectedContainerColor = CyberEmeraldGlow,
-    selectedLabelColor = CyberEmerald,
-    containerColor = DarkSurface,
-    labelColor = TextSecondary
+fun customGxTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedContainerColor = GxSurfaceAlt,
+    unfocusedContainerColor = GxSurface,
+    focusedBorderColor = GxPrimary,
+    unfocusedBorderColor = GxBorder,
+    focusedTextColor = GxTextHi,
+    unfocusedTextColor = GxTextHi,
+    cursorColor = GxPrimary
 )
+
+fun isDefaultBrowser(context: Context): Boolean {
+    return try {
+        val testIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com"))
+        val resolver = context.packageManager
+        val defaultHandler = resolver.resolveActivity(testIntent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+        defaultHandler?.activityInfo?.packageName == context.packageName
+    } catch (_: Exception) {
+        false
+    }
+}

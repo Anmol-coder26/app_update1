@@ -1,316 +1,314 @@
 package com.guardian.app
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.guardian.app.ui.components.GxButton
+import com.guardian.app.ui.components.GxCard
+import com.guardian.app.ui.components.GxChip
+import com.guardian.app.ui.components.GxChipVariant
+import com.guardian.app.ui.components.GxLiveDot
+import com.guardian.app.ui.components.GxRiskRing
+import com.guardian.app.ui.theme.GxBorder
+import com.guardian.app.ui.theme.GxDanger
+import com.guardian.app.ui.theme.GxDangerSoft
+import com.guardian.app.ui.theme.GxPrimary
+import com.guardian.app.ui.theme.GxPrimaryGlow
+import com.guardian.app.ui.theme.GxPrimarySoft
+import com.guardian.app.ui.theme.GxSafe
+import com.guardian.app.ui.theme.GxShapeLg
+import com.guardian.app.ui.theme.GxShapeMd
+import com.guardian.app.ui.theme.GxSurface
+import com.guardian.app.ui.theme.GxSurfaceAlt
+import com.guardian.app.ui.theme.GxTextHi
+import com.guardian.app.ui.theme.GxTextLo
+import com.guardian.app.ui.theme.GxTextMid
+import com.guardian.app.ui.theme.GxVoid
+import com.guardian.app.ui.theme.GxWarning
+import com.guardian.app.ui.theme.GxWarningSoft
+import com.guardian.app.ui.theme.gxDangerGlow
+import com.guardian.app.ui.theme.gxFancyGlow
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AIReasoningCard(
     report: RiskReport,
-    rawTranscript: String,
-    isAnalyzing: Boolean = false,
-    onReset: () -> Unit = {},
+    modifier: Modifier = Modifier,
+    callerNumber: String = "",
+    canEndCall: Boolean = true,
     onEndCall: (() -> Unit)? = null,
     onBlockNumber: (() -> Unit)? = null,
-    callerNumber: String = "",
-    modifier: Modifier = Modifier
+    onReset: (() -> Unit)? = null
 ) {
     var showHindiExplanation by remember { mutableStateOf(false) }
+    var isExpanded by remember { mutableStateOf(false) }
+    val isCritical = report.riskScore >= 85
 
-    val riskColor by animateColorAsState(
-        targetValue = when (report.status) {
-            RiskStatus.Low -> CyberEmerald
-            RiskStatus.Suspicious -> AmberWarning
-            RiskStatus.High -> CoralRed
+    // Shake animation on danger threshold crossing
+    var shakeTrigger by remember { mutableFloatStateOf(0f) }
+    val shakeOffset by animateFloatAsState(
+        targetValue = shakeTrigger,
+        animationSpec = keyframes {
+            durationMillis = 350
+            0f at 0
+            -6f at 50
+            6f at 100
+            -4f at 150
+            4f at 200
+            -2f at 250
+            2f at 300
+            0f at 350
         },
-        label = "aiRiskColor"
+        label = "shake-offset"
     )
 
-    // Pulsing Animation for Live In-Flight Analysis Feedback
-    val infiniteTransition = rememberInfiniteTransition(label = "pulseTransition")
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseAlpha"
-    )
+    LaunchedEffect(isCritical) {
+        if (isCritical) {
+            shakeTrigger = 1f
+        }
+    }
 
-    Card(
-        colors = CardDefaults.cardColors(containerColor = DarkSurface),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.5.dp, riskColor.copy(alpha = 0.6f)),
-        modifier = modifier.fillMaxWidth()
+    val glowModifier = if (isCritical) {
+        Modifier.gxDangerGlow()
+    } else {
+        Modifier.gxFancyGlow()
+    }
+
+    GxCard(
+        modifier = modifier
+            .offset { IntOffset(shakeOffset.toInt(), 0) }
+            .then(glowModifier),
+        backgroundColor = if (isCritical) Color(0xFF14070A) else GxSurface,
+        borderColor = if (isCritical) GxDanger.copy(alpha = 0.6f) else GxBorder,
+        contentPadding = 18.dp
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ----------------------------------------------------
-            // 1. TOP HEADER: Dual-Engine Status & Live Pulsing Indicator
+            // 1. Header Row (64dp)
             // ----------------------------------------------------
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    color = riskColor.copy(alpha = 0.15f),
-                    shape = CircleShape,
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.Psychology,
-                            contentDescription = null,
-                            tint = riskColor,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
-
+                GxLiveDot(
+                    color = when {
+                        isCritical -> GxDanger
+                        report.riskScore >= 40 -> GxWarning
+                        else -> GxSafe
+                    },
+                    size = 9.dp
+                )
                 Spacer(Modifier.width(10.dp))
-
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "Dual-Engine Semantic AI",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-
-                        if (isAnalyzing) {
-                            Spacer(Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(CyberEmerald)
-                                    .alpha(pulseAlpha)
-                            )
-                        }
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            if (report.isOffline) Icons.Default.CloudOff else Icons.Default.CloudDone,
-                            contentDescription = null,
-                            tint = if (report.isOffline) AmberWarning else CyberEmerald,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            if (report.isOffline) "Offline Scorer (${report.latencyMs}ms)"
-                            else "Gemini 1.5 Flash (${report.latencyMs}ms)",
-                            color = if (report.isOffline) AmberWarning else CyberEmerald,
-                            fontSize = 10.sp,
+                            "Dual-Engine AI",
+                            color = GxTextHi,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.SemiBold
                         )
+                        Spacer(Modifier.width(8.dp))
+                        GxChip(
+                            text = if (report.isOffline) "OFFLINE SCORER" else "GEMINI 1.5 FLASH",
+                            variant = if (report.isOffline) GxChipVariant.Warning else GxChipVariant.Brand,
+                            height = 22.dp
+                        )
                     }
-                }
-
-                // Capped Risk Score Badge
-                Surface(
-                    color = riskColor,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    if (callerNumber.isNotBlank()) {
                         Text(
-                            "${report.riskScore}%",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.ExtraBold
+                            "Target: $callerNumber",
+                            color = GxTextLo,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
+
+                // Bilingual Toggle Chip
+                GxChip(
+                    text = if (showHindiExplanation) "🇮🇳 हिंदी" else "🇬🇧 English",
+                    variant = GxChipVariant.Neutral,
+                    onClick = { showHindiExplanation = !showHindiExplanation },
+                    height = 26.dp
+                )
             }
 
             // ----------------------------------------------------
-            // 2. "WHY THIS SCORE?" TREE BREAKDOWN (For Judges & Transparency)
+            // 2. Centered Risk Score Block (140dp)
             // ----------------------------------------------------
-            if (report.topSignals.isNotEmpty()) {
-                Surface(
-                    color = DarkSurfaceElevated,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, BorderSubtle)
-                ) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(
-                            "Why This Score? (Signal Breakdown)",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextSecondary
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(136.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Radial Glow Backdrop
+                Box(
+                    modifier = Modifier
+                        .size(130.dp)
+                        .clip(RoundedCornerShape(100.dp))
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    when {
+                                        isCritical -> GxDanger.copy(alpha = 0.25f)
+                                        report.riskScore >= 40 -> GxWarning.copy(alpha = 0.2f)
+                                        else -> GxSafe.copy(alpha = 0.15f)
+                                    },
+                                    Color.Transparent
+                                )
+                            )
                         )
-                        Spacer(Modifier.height(6.dp))
-                        report.topSignals.forEachIndexed { index, signal ->
-                            val prefix = if (index == report.topSignals.lastIndex) "└─" else "├─"
-                            Row(
-                                modifier = Modifier.padding(vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(prefix, color = TextMuted, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                                Spacer(Modifier.width(6.dp))
-                                Text(signal.icon, fontSize = 12.sp)
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    "${signal.title}: ",
-                                    color = TextPrimary,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    signal.detail,
-                                    color = TextSecondary,
-                                    fontSize = 11.sp,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
+                )
+
+                GxRiskRing(
+                    riskScore = report.riskScore,
+                    size = 120.dp,
+                    strokeWidth = 9.dp
+                )
+            }
+
+            // ----------------------------------------------------
+            // 3. Cognitive Engine Grid (2x2)
+            // ----------------------------------------------------
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    EngineCardItem(
+                        icon = Icons.Default.AccountBalance,
+                        title = "Pretext Legitimacy",
+                        detected = report.engines.pretextLegitimacy.detected,
+                        detail = if (report.engines.pretextLegitimacy.detected) report.engines.pretextLegitimacy.summary else "Clean authority",
+                        modifier = Modifier.weight(1f)
+                    )
+                    EngineCardItem(
+                        icon = Icons.Default.Lock,
+                        title = "Intent Risk",
+                        detected = report.engines.intentRisk.detected,
+                        detail = if (report.engines.intentRisk.detected) report.engines.intentRisk.summary else "No credential theft",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    EngineCardItem(
+                        icon = Icons.Default.Timer,
+                        title = "Psychological Pressure",
+                        detected = report.engines.psychologicalPressure.detected,
+                        detail = if (report.engines.psychologicalPressure.detected) report.engines.psychologicalPressure.summary else "Normal tone",
+                        modifier = Modifier.weight(1f)
+                    )
+                    EngineCardItem(
+                        icon = Icons.Default.Bolt,
+                        title = "Pattern Vector",
+                        detected = report.engines.zeroShotVariant.detected || report.engines.informationAsymmetry.detected,
+                        detail = if (report.engines.zeroShotVariant.detected) report.engines.zeroShotVariant.variantName else "Standard call profile",
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
             // ----------------------------------------------------
-            // 3. COGNITIVE VECTORS BREAKDOWN
-            // ----------------------------------------------------
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Pretext Legitimacy
-                EngineSignalRow(
-                    icon = Icons.Default.AccountBalance,
-                    title = "Pretext Legitimacy",
-                    detected = report.engines.pretextLegitimacy.detected,
-                    detail = if (report.engines.pretextLegitimacy.detected) report.engines.pretextLegitimacy.summary else "No fabricated authority pretext",
-                    accentColor = ElectricIndigo
-                )
-
-                // Intent & Action Risk
-                EngineSignalRow(
-                    icon = Icons.Default.Lock,
-                    title = "Intent & Action Risk",
-                    detected = report.engines.intentRisk.detected,
-                    detail = if (report.engines.intentRisk.detected) report.engines.intentRisk.summary else "No credential or financial demand",
-                    accentColor = CoralRed
-                )
-
-                // Psychological Pressure
-                EngineSignalRow(
-                    icon = Icons.Default.Timer,
-                    title = "Psychological Pressure",
-                    detected = report.engines.psychologicalPressure.detected,
-                    detail = if (report.engines.psychologicalPressure.detected) report.engines.psychologicalPressure.summary else "Normal conversational pacing",
-                    accentColor = AmberWarning
-                )
-            }
-
-            // ----------------------------------------------------
-            // 4. TACTICAL BILINGUAL AI EXPLANATION
+            // 4. Tactical Reasoning Block
             // ----------------------------------------------------
             Surface(
-                color = DarkSurfaceElevated,
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, BorderSubtle)
+                color = GxSurfaceAlt,
+                shape = GxShapeMd,
+                border = androidx.compose.foundation.BorderStroke(1.dp, GxBorder),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
             ) {
-                Column(Modifier.padding(14.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Info, contentDescription = null, tint = CyberEmerald, modifier = Modifier.size(16.dp))
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = null,
+                            tint = GxPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
                         Spacer(Modifier.width(6.dp))
-                        Text("Tactical AI Explanation", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPrimary)
+                        Text(
+                            "AI Tactical Reasoning",
+                            color = GxTextHi,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                         Spacer(Modifier.weight(1f))
-
-                        // Language Switcher (EN / HI)
-                        Surface(
-                            color = DarkSurfaceVariant,
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.clickable { showHindiExplanation = !showHindiExplanation }
-                        ) {
-                            Text(
-                                if (showHindiExplanation) "🇮🇳 हिंदी" else "🇬🇧 English",
-                                color = CyberEmerald,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                            )
-                        }
+                        Text(
+                            if (isExpanded) "Less" else "More",
+                            color = GxPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
 
                     Spacer(Modifier.height(8.dp))
 
+                    val explanation = if (showHindiExplanation) report.explanationHi else report.explanationEn
                     Text(
-                        if (showHindiExplanation) report.explanationHi else report.explanationEn,
-                        color = TextPrimary,
+                        text = explanation.ifBlank { "Monitoring live speech utterances for deception tactics..." },
+                        color = GxTextMid,
                         fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        fontWeight = FontWeight.Medium
+                        lineHeight = 19.sp,
+                        maxLines = if (isExpanded) Int.MAX_VALUE else 3
                     )
                 }
             }
@@ -319,209 +317,111 @@ fun AIReasoningCard(
             // 5. Highlighted Risky Phrases
             // ----------------------------------------------------
             if (report.highlightedPhrases.isNotEmpty()) {
-                Column {
-                    Text("Highlighted Risky Phrases", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextMuted)
-                    Spacer(Modifier.height(6.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Flagged Trigger Keywords",
+                        color = GxTextLo,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp
+                    )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         report.highlightedPhrases.forEach { phrase ->
-                            Surface(
-                                color = CoralRed.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(6.dp),
-                                border = BorderStroke(1.dp, CoralRed.copy(alpha = 0.4f))
-                            ) {
-                                Text(
-                                    "⚠️ $phrase",
-                                    color = CoralRed,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
+                            GxChip(
+                                text = phrase,
+                                variant = GxChipVariant.Danger,
+                                icon = Icons.Default.WarningAmber,
+                                height = 26.dp
+                            )
                         }
                     }
                 }
             }
 
             // ----------------------------------------------------
-            // 6. CALL PROTECTION ACTIONS (End Call / Block Number)
+            // 6. Action Block (Critical Warning Controls)
             // ----------------------------------------------------
-            val context = androidx.compose.ui.platform.LocalContext.current
-            val canEndCall = com.guardian.app.callprotect.CallActionHelper.canEndCall(context)
-            val isCritical = report.riskScore >= 85
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (canEndCall && onEndCall != null) {
-                        Button(
+            if (isCritical || onEndCall != null || onBlockNumber != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (onEndCall != null) {
+                        GxButton.Danger(
+                            text = "END CALL IMMEDIATELY",
                             onClick = onEndCall,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isCritical) CoralRed else Color(0xFF7F1D1D),
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                                .then(if (isCritical) Modifier.alpha(pulseAlpha) else Modifier)
-                        ) {
-                            Icon(
-                                Icons.Default.WarningAmber,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text("END CALL", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
-                        }
-                    } else if (onEndCall != null) {
-                        Surface(
-                            color = DarkSurfaceElevated,
-                            shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(1.dp, CoralRed.copy(alpha = 0.5f)),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
-                                Text(
-                                    "Tap phone's end button to stop call",
-                                    color = CoralRed,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
-                        }
+                            pulsing = isCritical,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-
                     if (onBlockNumber != null) {
-                        OutlinedButton(
+                        GxButton.Ghost(
+                            text = "Block & Add to Reputation DB",
                             onClick = onBlockNumber,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = AmberWarning),
-                            border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.5f)),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Lock,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text("BLOCK NUMBER", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
+                            icon = Icons.Default.Lock,
+                            modifier = Modifier.fillMaxWidth(),
+                            height = 46.dp
+                        )
                     }
                 }
-            }
-
-            // ----------------------------------------------------
-            // 7. Reset Demo Button & Disclaimer
-            // ----------------------------------------------------
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = onReset,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, BorderSubtle),
-                    modifier = Modifier.height(30.dp)
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Reset Demo", fontSize = 10.sp, color = TextSecondary)
-                }
-
-                Spacer(Modifier.width(10.dp))
-
-                Text(
-                    "Heuristic AI assistant. Always verify with official channels. Audio in-memory only.",
-                    color = TextMuted,
-                    fontSize = 10.sp,
-                    lineHeight = 13.sp,
-                    modifier = Modifier.weight(1f)
-                )
             }
         }
     }
 }
 
 @Composable
-private fun EngineSignalRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+private fun EngineCardItem(
+    icon: ImageVector,
     title: String,
     detected: Boolean,
     detail: String,
-    accentColor: Color
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        color = if (detected) accentColor.copy(alpha = 0.12f) else DarkSurfaceElevated,
-        shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, if (detected) accentColor.copy(alpha = 0.4f) else BorderSubtle)
+        color = if (detected) GxDangerSoft else GxSurfaceAlt,
+        shape = GxShapeMd,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (detected) GxDanger.copy(alpha = 0.5f) else GxBorder
+        ),
+        modifier = modifier
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Surface(
-                color = if (detected) accentColor else DarkSurfaceVariant,
-                shape = CircleShape,
-                modifier = Modifier.size(24.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        icon,
-                        contentDescription = null,
-                        tint = if (detected) Color.White else TextMuted,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
-
-            Spacer(Modifier.width(10.dp))
-
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (detected) accentColor else TextPrimary
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (detected) GxDanger else GxTextMid,
+                    modifier = Modifier.size(16.dp)
                 )
-                Text(
-                    detail,
-                    fontSize = 11.sp,
-                    color = if (detected) TextPrimary else TextSecondary,
-                    lineHeight = 14.sp
+                Spacer(Modifier.weight(1f))
+                GxChip(
+                    text = if (detected) "FLAGGED" else "SAFE",
+                    variant = if (detected) GxChipVariant.Danger else GxChipVariant.Safe,
+                    height = 20.dp
                 )
             }
-
-            if (detected) {
-                Surface(
-                    color = accentColor,
-                    shape = RoundedCornerShape(4.dp)
-                ) {
-                    Text(
-                        "FLAGGED",
-                        color = Color.White,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = title,
+                color = GxTextHi,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+            Text(
+                text = detail,
+                color = if (detected) GxDanger else GxTextLo,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                maxLines = 2
+            )
         }
     }
 }

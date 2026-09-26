@@ -3,6 +3,7 @@ package com.guardian.app.callprotect
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,26 +22,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.ReportProblem
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,27 +52,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.guardian.app.AmberWarning
-import com.guardian.app.BorderSubtle
-import com.guardian.app.CoralRed
-import com.guardian.app.CyberEmerald
-import com.guardian.app.CyberEmeraldGlow
-import com.guardian.app.DarkBackground
-import com.guardian.app.DarkSurface
-import com.guardian.app.DarkSurfaceElevated
-import com.guardian.app.DarkSurfaceVariant
-import com.guardian.app.TextMuted
-import com.guardian.app.TextPrimary
-import com.guardian.app.TextSecondary
+import com.guardian.app.ui.components.GxButton
+import com.guardian.app.ui.components.GxCard
+import com.guardian.app.ui.components.GxChip
+import com.guardian.app.ui.components.GxChipVariant
+import com.guardian.app.ui.components.GxHeader
+import com.guardian.app.ui.theme.GxBase
+import com.guardian.app.ui.theme.GxBorder
+import com.guardian.app.ui.theme.GxDanger
+import com.guardian.app.ui.theme.GxDangerSoft
+import com.guardian.app.ui.theme.GxPrimary
+import com.guardian.app.ui.theme.GxPrimarySoft
+import com.guardian.app.ui.theme.GxSafe
+import com.guardian.app.ui.theme.GxSafeSoft
+import com.guardian.app.ui.theme.GxShapeLg
+import com.guardian.app.ui.theme.GxShapeMd
+import com.guardian.app.ui.theme.GxShapePill
+import com.guardian.app.ui.theme.GxSurface
+import com.guardian.app.ui.theme.GxSurfaceAlt
+import com.guardian.app.ui.theme.GxTextHi
+import com.guardian.app.ui.theme.GxTextLo
+import com.guardian.app.ui.theme.GxTextMid
+import com.guardian.app.ui.theme.GxWarning
+import com.guardian.app.ui.theme.GxWarningSoft
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CallHistoryScreen(
     onBack: () -> Unit
@@ -83,6 +92,9 @@ fun CallHistoryScreen(
     val scope = rememberCoroutineScope()
     val historyEntries = remember { mutableStateListOf<CallHistoryEntry>() }
     var isLoading by remember { mutableStateOf(true) }
+    var selectedFilter by remember { mutableStateOf("All") }
+    var searchQuery by remember { mutableStateOf("") }
+    var activeModalEntry by remember { mutableStateOf<CallHistoryEntry?>(null) }
 
     fun refreshList() {
         scope.launch {
@@ -98,257 +110,335 @@ fun CallHistoryScreen(
         refreshList()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
+    val filteredEntries = historyEntries.filter { entry ->
+        val matchesSearch = entry.number.contains(searchQuery, ignoreCase = true) ||
+            entry.topSignals.contains(searchQuery, ignoreCase = true)
+        val matchesFilter = when (selectedFilter) {
+            "High Risk" -> entry.riskScore >= 70
+            "Safe" -> entry.riskScore < 40
+            "Blocked" -> entry.actionTaken.contains("block", ignoreCase = true)
+            else -> true
+        }
+        matchesSearch && matchesFilter
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(GxBase)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            GxHeader(
+                title = "Call Audit Log",
+                onBack = onBack,
+                actionContent = {
                     Text(
-                        "Scam Call History",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = TextPrimary
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = TextPrimary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkBackground
-                )
-            )
-        },
-        containerColor = DarkBackground
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(DarkBackground)
-        ) {
-            if (historyEntries.isEmpty() && !isLoading) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Surface(
-                        color = CyberEmeraldGlow,
-                        shape = CircleShape,
-                        modifier = Modifier.size(64.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.Shield,
-                                contentDescription = null,
-                                tint = CyberEmerald,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "No Scam Calls Recorded",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = TextPrimary
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Incoming and ongoing phone calls screened by Guardian AI will be securely logged here.",
-                        color = TextSecondary,
-                        fontSize = 13.sp,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        lineHeight = 18.sp
+                        "${historyEntries.size} calls",
+                        color = GxPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(historyEntries, key = { it.id }) { entry ->
-                        CallHistoryCard(
-                            entry = entry,
-                            onReport = {
-                                ReportToCybercrime.report(context, entry)
-                                scope.launch {
-                                    val repo = NumberReputationRepository(context)
-                                    repo.markReported(entry.id)
-                                    refreshList()
-                                }
-                            },
-                            onBlock = {
-                                val success = CallActionHelper.blockNumber(context, entry.number)
-                                if (success) {
-                                    Toast.makeText(context, "Blocked ${entry.number}", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(context, "Could not block number", Toast.LENGTH_SHORT).show()
-                                }
-                            }
+            )
+
+            // Search Bar & Filter Chips
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search caller number or threat...", color = GxTextLo, fontSize = 13.sp) },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = GxTextLo, modifier = Modifier.size(18.dp))
+                    },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = GxSurfaceAlt,
+                        unfocusedContainerColor = GxSurface,
+                        focusedBorderColor = GxPrimary,
+                        unfocusedBorderColor = GxBorder,
+                        focusedTextColor = GxTextHi,
+                        unfocusedTextColor = GxTextHi
+                    ),
+                    shape = GxShapeMd,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("All", "High Risk", "Safe", "Blocked").forEach { filter ->
+                        val isSelected = selectedFilter == filter
+                        GxChip(
+                            text = filter,
+                            variant = if (isSelected) GxChipVariant.Brand else GxChipVariant.Neutral,
+                            onClick = { selectedFilter = filter },
+                            height = 30.dp
                         )
                     }
                 }
             }
+
+            // Call List
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = GxPrimary, strokeWidth = 2.dp)
+                }
+            } else if (filteredEntries.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Surface(
+                            color = GxSurfaceAlt,
+                            shape = CircleShape,
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.History, contentDescription = null, tint = GxTextLo, modifier = Modifier.size(32.dp))
+                            }
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Text("No calls analyzed yet", color = GxTextHi, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Calls received while Guardian is active will be audited here with full transcripts.",
+                            color = GxTextLo,
+                            fontSize = 12.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filteredEntries) { entry ->
+                        CallHistoryRow(
+                            entry = entry,
+                            onClick = { activeModalEntry = entry }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Modal Details Sheet
+    if (activeModalEntry != null) {
+        CallDetailModal(
+            entry = activeModalEntry!!,
+            onDismiss = { activeModalEntry = null },
+            onBlock = {
+                val ok = CallActionHelper.blockNumber(context, activeModalEntry!!.number)
+                if (ok) {
+                    Toast.makeText(context, "Number blocked & reputation updated", Toast.LENGTH_SHORT).show()
+                    refreshList()
+                }
+            },
+            onReport = {
+                ReportToCybercrime.report(context, activeModalEntry!!)
+            }
+        )
+    }
+}
+
+@Composable
+private fun CallHistoryRow(
+    entry: CallHistoryEntry,
+    onClick: () -> Unit
+) {
+    val isHighRisk = entry.riskScore >= 70
+    val isWarning = entry.riskScore in 40..69
+    val dateFormat = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+    val formattedDate = dateFormat.format(Date(entry.timestamp))
+
+    GxCard(
+        backgroundColor = GxSurface,
+        borderColor = GxBorder,
+        contentPadding = 14.dp,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left Avatar Circle in risk color
+            Surface(
+                color = when {
+                    isHighRisk -> GxDangerSoft
+                    isWarning -> GxWarningSoft
+                    else -> GxSafeSoft
+                },
+                shape = CircleShape,
+                border = BorderStroke(
+                    1.dp,
+                    when {
+                        isHighRisk -> GxDanger.copy(alpha = 0.4f)
+                        isWarning -> GxWarning.copy(alpha = 0.4f)
+                        else -> GxSafe.copy(alpha = 0.4f)
+                    }
+                ),
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (isHighRisk) Icons.Default.ReportProblem else Icons.Default.PhoneInTalk,
+                        contentDescription = null,
+                        tint = when {
+                            isHighRisk -> GxDanger
+                            isWarning -> GxWarning
+                            else -> GxSafe
+                        },
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = entry.number.ifBlank { "Unknown Caller" },
+                    color = GxTextHi,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = if (entry.topSignals.isNotBlank()) entry.topSignals else "Speech audited clean",
+                    color = GxTextMid,
+                    fontSize = 11.sp,
+                    maxLines = 1
+                )
+                Text(
+                    text = formattedDate,
+                    color = GxTextLo,
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            GxChip(
+                text = "${entry.riskScore}%",
+                variant = when {
+                    isHighRisk -> GxChipVariant.Danger
+                    isWarning -> GxChipVariant.Warning
+                    else -> GxChipVariant.Safe
+                },
+                height = 26.dp
+            )
         }
     }
 }
 
 @Composable
-fun CallHistoryCard(
+private fun CallDetailModal(
     entry: CallHistoryEntry,
-    onReport: () -> Unit,
-    onBlock: () -> Unit
+    onDismiss: () -> Unit,
+    onBlock: () -> Unit,
+    onReport: () -> Unit
 ) {
+    val dateFormat = SimpleDateFormat("EEEE, dd MMMM yyyy, hh:mm a", Locale.getDefault())
+    val formattedDate = dateFormat.format(Date(entry.timestamp))
     val isHighRisk = entry.riskScore >= 70
-    val isMediumRisk = entry.riskScore in 30..69
-    val statusColor = when {
-        isHighRisk -> CoralRed
-        isMediumRisk -> AmberWarning
-        else -> CyberEmerald
-    }
 
-    val dateFormatted = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(entry.timestamp))
-
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = DarkSurface
-        ),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, if (isHighRisk) CoralRed.copy(alpha = 0.5f) else BorderSubtle)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = GxSurface,
+        titleContentColor = GxTextHi,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Call Audit: ${entry.number}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = GxTextHi
+                )
+                Spacer(Modifier.weight(1f))
+                GxChip(
+                    text = "${entry.riskScore}% RISK",
+                    variant = if (isHighRisk) GxChipVariant.Danger else GxChipVariant.Safe
+                )
+            }
+        },
+        text = {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Surface(
-                    color = statusColor.copy(alpha = 0.15f),
-                    shape = CircleShape,
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = if (isHighRisk) Icons.Default.ReportProblem else Icons.Default.PhoneInTalk,
-                            contentDescription = null,
-                            tint = statusColor,
-                            modifier = Modifier.size(20.dp)
+                item {
+                    Text(formattedDate, color = GxTextLo, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                }
+
+                if (entry.topSignals.isNotBlank()) {
+                    item {
+                        GxCard(
+                            backgroundColor = GxSurfaceAlt,
+                            contentPadding = 10.dp,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column {
+                                Text("Primary Vector / Signals:", color = GxTextLo, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(4.dp))
+                                Text(entry.topSignals, color = if (isHighRisk) GxDanger else GxSafe, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Text("Call Transcript Snippet", color = GxTextMid, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    GxCard(
+                        backgroundColor = GxSurfaceAlt,
+                        contentPadding = 12.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            entry.transcriptSummary.ifBlank { "No speech recorded." },
+                            color = GxTextHi,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                            fontFamily = FontFamily.Monospace
                         )
                     }
                 }
 
-                Spacer(Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (entry.number.isNotBlank()) entry.number else "Unknown Number",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = dateFormatted,
-                        fontSize = 11.sp,
-                        color = TextMuted
-                    )
-                }
-
-                Surface(
-                    color = statusColor.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, statusColor.copy(alpha = 0.5f))
-                ) {
-                    Text(
-                        text = "${entry.riskScore}% RISK",
-                        color = statusColor,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        GxButton.Danger(
+                            text = "Report 1930",
+                            onClick = onReport,
+                            icon = Icons.AutoMirrored.Filled.OpenInNew,
+                            modifier = Modifier.weight(1f),
+                            height = 42.dp
+                        )
+                        GxButton.Ghost(
+                            text = "Block",
+                            onClick = onBlock,
+                            icon = Icons.Default.Block,
+                            modifier = Modifier.weight(1f),
+                            height = 42.dp
+                        )
+                    }
                 }
             }
-
-            if (entry.topSignals.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = "Signals: ${entry.topSignals}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (isHighRisk) CoralRed else TextSecondary
-                )
-            }
-
-            if (entry.transcriptSummary.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Surface(
-                    color = DarkBackground.copy(alpha = 0.6f),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = entry.transcriptSummary,
-                        fontSize = 11.sp,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(8.dp),
-                        maxLines = 3
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onBlock,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
-                    border = BorderStroke(1.dp, BorderSubtle),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Icon(Icons.Default.Block, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Block", fontSize = 11.sp)
-                }
-
-                Button(
-                    onClick = onReport,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (entry.wasUserReported) DarkSurfaceElevated else CoralRed,
-                        contentColor = if (entry.wasUserReported) CyberEmerald else Color.White
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1.4f),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Icon(
-                        if (entry.wasUserReported) Icons.Default.CheckCircle else Icons.Default.OpenInNew,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        if (entry.wasUserReported) "Reported" else "Report to Cybercrime",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close", color = GxTextMid) }
         }
-    }
+    )
 }

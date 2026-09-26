@@ -11,6 +11,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -45,14 +47,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -71,6 +66,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import com.guardian.app.ui.components.GxButton
+import com.guardian.app.ui.components.GxCard
+import com.guardian.app.ui.components.GxChip
+import com.guardian.app.ui.components.GxChipVariant
+import com.guardian.app.ui.components.GxLiveDot
+import com.guardian.app.ui.theme.GuardianTheme
+import com.guardian.app.ui.theme.GxBorder
+import com.guardian.app.ui.theme.GxDanger
+import com.guardian.app.ui.theme.GxDangerSoft
+import com.guardian.app.ui.theme.GxPrimary
+import com.guardian.app.ui.theme.GxSafe
+import com.guardian.app.ui.theme.GxShapeLg
+import com.guardian.app.ui.theme.GxShapeMd
+import com.guardian.app.ui.theme.GxShapePill
+import com.guardian.app.ui.theme.GxShapeSm
+import com.guardian.app.ui.theme.GxSurface
+import com.guardian.app.ui.theme.GxSurfaceAlt
+import com.guardian.app.ui.theme.GxTextHi
+import com.guardian.app.ui.theme.GxTextLo
+import com.guardian.app.ui.theme.GxTextMid
+import com.guardian.app.ui.theme.GxTheme
+import com.guardian.app.ui.theme.GxType
+import com.guardian.app.ui.theme.GxVoid
+import com.guardian.app.ui.theme.GxWarning
+import com.guardian.app.ui.theme.GxWarningSoft
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -487,307 +507,270 @@ private fun CallRiskScreen(
     onSimulateScenario: (String) -> Unit,
     onPlayFullDemo: (Int) -> Unit = {}
 ) {
-    val riskColor by animateColorAsState(
-        targetValue = when (riskReport.status) {
-            RiskStatus.Low -> CyberEmerald
-            RiskStatus.Suspicious -> AmberWarning
-            RiskStatus.High -> CoralRed
-        },
-        label = "callRiskColor"
-    )
-
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground),
-        contentPadding = PaddingValues(18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .background(GxVoid),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Top Header with Agora Badge
+        // Overlay Header: Caller ID + Live Pulsing Monitor
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    color = CyberEmeraldGlow,
-                    shape = CircleShape,
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                            contentDescription = null,
-                            tint = CyberEmerald,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Call Scam Intelligence", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    Text(
-                        if (isAgoraMode) "Agora RTC Voice Stream active" else "Real-time Dual-Engine AI analysis",
-                        color = TextSecondary,
-                        fontSize = 12.sp
-                    )
-                }
-
-                Surface(
-                    color = DarkSurfaceVariant,
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        "⚡ Powered by Agora",
-                        color = ElectricIndigo,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            }
-        }
-
-        // Language Mode Filter Chips
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
+            GxCard(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = GxSurface
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Language:", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    LanguageMode.values().forEach { lang ->
-                        FilterChip(
-                            selected = selectedLanguage == lang,
-                            onClick = { onLanguageSelect(lang) },
-                            label = { Text(lang.label, fontSize = 11.sp) },
-                            leadingIcon = if (selectedLanguage == lang) {
-                                { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                            } else null
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            GxLiveDot(pulsing = isDetecting, color = if (isDetecting) GxSafe else GxTextLo)
+                            Text(
+                                if (isDetecting) "MONITORING ACTIVE" else "MONITORING STANDBY",
+                                style = GxType.caption,
+                                color = if (isDetecting) GxSafe else GxTextLo,
+                                letterSpacing = 1.sp
+                            )
+                        }
+
+                        GxChip(
+                            text = if (isAgoraMode) "⚡ AGORA RTC" else "🎙️ BHASHINI DUAL-AI",
+                            variant = GxChipVariant.Brand
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = callerNumber.ifBlank { "Unknown Caller" },
+                        style = GxType.headline,
+                        color = GxTextHi
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = if (isDetecting) {
+                            if (isAgoraMode) "Agora voice stream active • Acoustic audio: ${(audioLevel * 100).toInt()}%"
+                            else "Acoustic listener active • Voice activity: ${(audioLevel * 100).toInt()}%"
+                        } else "Hold phone on speaker or initiate secured VoIP channel",
+                        style = GxType.body,
+                        color = GxTextMid
+                    )
+                }
+            }
+        }
+
+        // Language Mode Selector
+        item {
+            GxCard(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = GxSurface
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "ASR DIALECT RECOGNITION",
+                        style = GxType.caption,
+                        color = GxTextLo,
+                        letterSpacing = 1.sp
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        LanguageMode.values().forEach { lang ->
+                            val isSelected = selectedLanguage == lang
+                            GxChip(
+                                text = lang.label,
+                                variant = if (isSelected) GxChipVariant.Brand else GxChipVariant.Neutral,
+                                onClick = { onLanguageSelect(lang) }
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // AI REASONING CARD (Core Deliverable Component)
+        // AI REASONING CARD (Cognitive 2x2 Grid + Risk Ring + Action Block)
         item {
             AIReasoningCard(
                 report = riskReport,
-                rawTranscript = transcript,
-                isAnalyzing = isAnalyzing,
+                callerNumber = callerNumber,
                 onReset = onReset,
                 onEndCall = onEndCall,
-                onBlockNumber = onBlockNumber,
-                callerNumber = callerNumber
+                onBlockNumber = onBlockNumber
             )
         }
 
         // High Risk Urgent Banner
         if (riskReport.status == RiskStatus.High) {
             item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF450A0A)),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, CoralRed)
+                GxCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    backgroundColor = GxDangerSoft,
+                    borderColor = GxDanger
                 ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Icon(
                                 Icons.Default.WarningAmber,
                                 contentDescription = null,
-                                tint = CoralRed,
-                                modifier = Modifier.size(24.dp)
+                                tint = GxDanger,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(Modifier.width(8.dp))
                             Text(
                                 "CRITICAL FRAUD THREAT DETECTED",
-                                fontWeight = FontWeight.Bold,
-                                color = CoralRed,
-                                fontSize = 14.sp
+                                style = GxType.title,
+                                color = GxDanger
                             )
                         }
-                        Spacer(Modifier.height(6.dp))
                         Text(
-                            "• HANG UP THE CALL IMMEDIATELY.\n• Do NOT share OTP, PIN, or banking passwords.\n• Police / CBI / Banks NEVER demand money or digital arrest over phone calls.\n• Do NOT install AnyDesk or screen sharing apps.",
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp,
-                            color = Color(0xFFFECACA)
+                            "• HANG UP THE CALL IMMEDIATELY.\n• Do NOT share OTP, PIN, or banking passwords.\n• Law Enforcement & Banks NEVER enforce digital arrest.\n• Do NOT install remote desktop tools (AnyDesk/TeamViewer).",
+                            style = GxType.body,
+                            color = GxDanger
                         )
                     }
                 }
             }
         }
 
-        // Action Buttons (Agora VoIP & Speakerphone AI)
+        // Action Buttons (VoIP & Speakerphone)
         item {
             if (isDetecting) {
-                Button(
-                    onClick = onStop,
-                    colors = ButtonDefaults.buttonColors(containerColor = CoralRed),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.CallEnd, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (isAgoraMode) "End Agora VoIP Call" else "Stop Live Listening", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
+                GxButton.Danger(
+                    text = if (isAgoraMode) "End Agora VoIP Stream" else "Stop Live Listening",
+                    icon = Icons.Default.CallEnd,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onStop
+                )
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Button(
-                        onClick = onStartAgoraVoip,
-                        colors = ButtonDefaults.buttonColors(containerColor = ElectricIndigo, contentColor = Color.White),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.HeadsetMic, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Start Agora VoIP Call", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Button(
-                        onClick = onStartSpeaker,
-                        colors = ButtonDefaults.buttonColors(containerColor = CyberEmerald, contentColor = Color(0xFF022C22)),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Speakerphone AI", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // Live Audio Stream Status
-        if (isDetecting) {
-            item {
-                Surface(
-                    color = DarkSurface,
-                    shape = RoundedCornerShape(10.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.3f))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(Icons.Default.GraphicEq, contentDescription = null, tint = CyberEmerald, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            if (isAgoraMode) "Agora RTC Audio streaming... (${(audioLevel * 100).toInt()}% mic volume)"
-                            else "Live acoustic stream listening... (${(audioLevel * 100).toInt()}% mic activity)",
-                            color = CyberEmerald,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-        }
-
-        // Raw Transcript Feed Card
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
-            ) {
-                Column(Modifier.padding(14.dp)) {
-                    Text("Live Utterance Stream", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPrimary)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        if (transcript.isNotBlank()) "\"$transcript\""
-                        else "Awaiting caller speech...",
-                        fontWeight = if (transcript.isNotBlank()) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (transcript.isNotBlank()) CyberEmerald else TextSecondary,
-                        fontSize = 13.sp
+                    GxButton.Primary(
+                        text = "Agora VoIP",
+                        icon = Icons.Default.HeadsetMic,
+                        modifier = Modifier.weight(1f),
+                        onClick = onStartAgoraVoip
                     )
 
+                    GxButton.Ghost(
+                        text = "Speakerphone",
+                        icon = Icons.Default.Mic,
+                        modifier = Modifier.weight(1f),
+                        onClick = onStartSpeaker
+                    )
+                }
+            }
+        }
+
+        // Live Utterance Transcript Feed
+        item {
+            GxCard(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = GxSurface
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "LIVE UTTERANCE STREAM",
+                        style = GxType.caption,
+                        color = GxTextLo,
+                        letterSpacing = 1.sp
+                    )
+
+                    Surface(
+                        color = GxSurfaceAlt,
+                        shape = GxShapeSm,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (transcript.isNotBlank()) "\"$transcript\"" else "Awaiting live acoustic speech...",
+                            style = GxType.mono,
+                            color = if (transcript.isNotBlank()) GxPrimary else GxTextLo,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+
                     if (conversationHistory.isNotEmpty()) {
-                        Spacer(Modifier.height(10.dp))
-                        Text("Conversation Dialogue Log:", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = TextMuted)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "CONVERSATION LOG:",
+                            style = GxType.caption,
+                            color = GxTextLo
+                        )
                         conversationHistory.take(4).forEach { phrase ->
-                            Text("• $phrase", fontSize = 11.sp, color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
+                            Text(
+                                "• $phrase",
+                                style = GxType.caption,
+                                color = GxTextMid
+                            )
                         }
                     }
                 }
             }
         }
 
-        // Instant Hackathon Demo Simulator
+        // Stage Demo Simulation Triggers
         item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
-                shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.4f))
+            GxCard(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = GxSurfaceAlt
             ) {
-                Column(Modifier.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = ElectricIndigo, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = GxPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
                         Text(
-                            if (isDemoModePlaying) "🔴 Live Stage Demo Playing (Auto Dialogue)..." else "Instant Stage Demo Triggers",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = if (isDemoModePlaying) CoralRed else TextPrimary
+                            if (isDemoModePlaying) "Stage Demo Playing (Multi-turn)..." else "STAGE DEMO SCENARIOS",
+                            style = GxType.title,
+                            color = if (isDemoModePlaying) GxDanger else GxTextHi
                         )
                     }
+
                     Text(
-                        "Run full multi-turn simulated scam dialogues to demonstrate evolving AI risk score on stage:",
-                        fontSize = 11.sp,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(vertical = 4.dp)
+                        "Simulate full conversational fraud dialogues to demonstrate real-time AI classification:",
+                        style = GxType.caption,
+                        color = GxTextMid
                     )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Button(
-                            onClick = { onPlayFullDemo(0) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF450A0A), contentColor = CoralRed),
+                        GxButton.Danger(
+                            text = "🚨 Digital Arrest",
                             modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("🚨 Digital Arrest", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
+                            onClick = { onPlayFullDemo(0) }
+                        )
 
-                        Button(
-                            onClick = { onPlayFullDemo(1) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF332005), contentColor = AmberWarning),
+                        GxButton.Ghost(
+                            text = "🏦 SBI KYC",
                             modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("🏦 Bank KYC", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
+                            onClick = { onPlayFullDemo(1) }
+                        )
 
-                        Button(
-                            onClick = { onPlayFullDemo(2) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF063A2D), contentColor = CyberEmerald),
+                        GxButton.Ghost(
+                            text = "⚡ Power Cut",
                             modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("⚡ Electricity Cut", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
+                            onClick = { onPlayFullDemo(2) }
+                        )
                     }
                 }
             }

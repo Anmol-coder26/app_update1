@@ -121,61 +121,61 @@ fun GuardianApp(
         else -> Scaffold(
             bottomBar = {
                 NavigationBar(
-                    containerColor = DarkSurface,
-                    contentColor = TextPrimary,
-                    tonalElevation = 8.dp,
-                    modifier = Modifier.border(width = 1.dp, color = BorderSubtle)
+                    containerColor = com.guardian.app.ui.theme.GxBase,
+                    contentColor = com.guardian.app.ui.theme.GxTextHi,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.border(width = 1.dp, color = com.guardian.app.ui.theme.GxBorder)
                 ) {
                     NavigationBarItem(
                         selected = screen == AppScreen.Home,
                         onClick = { screen = AppScreen.Home },
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Home", modifier = Modifier.size(22.dp)) },
-                        label = { Text("Home", fontSize = 11.sp, fontWeight = if (screen == AppScreen.Home) FontWeight.Bold else FontWeight.Normal) },
+                        icon = { Icon(Icons.Default.Home, contentDescription = "Home", modifier = Modifier.size(20.dp)) },
+                        label = { Text("Home", style = com.guardian.app.ui.theme.GxType.caption) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = CyberEmerald,
-                            selectedTextColor = CyberEmerald,
-                            indicatorColor = CyberEmeraldGlow,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary
+                            selectedIconColor = com.guardian.app.ui.theme.GxPrimary,
+                            selectedTextColor = com.guardian.app.ui.theme.GxPrimary,
+                            indicatorColor = com.guardian.app.ui.theme.GxSurfaceAlt,
+                            unselectedIconColor = com.guardian.app.ui.theme.GxTextLo,
+                            unselectedTextColor = com.guardian.app.ui.theme.GxTextLo
                         )
                     )
                     NavigationBarItem(
                         selected = screen == AppScreen.Events,
                         onClick = { screen = AppScreen.Events },
-                        icon = { Icon(Icons.AutoMirrored.Filled.EventNote, contentDescription = "Events", modifier = Modifier.size(22.dp)) },
-                        label = { Text("Audit Log", fontSize = 11.sp, fontWeight = if (screen == AppScreen.Events) FontWeight.Bold else FontWeight.Normal) },
+                        icon = { Icon(Icons.AutoMirrored.Filled.EventNote, contentDescription = "Events", modifier = Modifier.size(20.dp)) },
+                        label = { Text("Audit Log", style = com.guardian.app.ui.theme.GxType.caption) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = CyberEmerald,
-                            selectedTextColor = CyberEmerald,
-                            indicatorColor = CyberEmeraldGlow,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary
+                            selectedIconColor = com.guardian.app.ui.theme.GxPrimary,
+                            selectedTextColor = com.guardian.app.ui.theme.GxPrimary,
+                            indicatorColor = com.guardian.app.ui.theme.GxSurfaceAlt,
+                            unselectedIconColor = com.guardian.app.ui.theme.GxTextLo,
+                            unselectedTextColor = com.guardian.app.ui.theme.GxTextLo
                         )
                     )
                     NavigationBarItem(
                         selected = screen == AppScreen.Incidents,
                         onClick = { screen = AppScreen.Incidents },
-                        icon = { Icon(Icons.Default.WarningAmber, contentDescription = "Incidents", modifier = Modifier.size(22.dp)) },
-                        label = { Text("Threats", fontSize = 11.sp, fontWeight = if (screen == AppScreen.Incidents) FontWeight.Bold else FontWeight.Normal) },
+                        icon = { Icon(Icons.Default.WarningAmber, contentDescription = "Incidents", modifier = Modifier.size(20.dp)) },
+                        label = { Text("Threats", style = com.guardian.app.ui.theme.GxType.caption) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = CoralRed,
-                            selectedTextColor = CoralRed,
-                            indicatorColor = Color(0xFF450A0A),
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary
+                            selectedIconColor = com.guardian.app.ui.theme.GxDanger,
+                            selectedTextColor = com.guardian.app.ui.theme.GxDanger,
+                            indicatorColor = com.guardian.app.ui.theme.GxDangerSoft,
+                            unselectedIconColor = com.guardian.app.ui.theme.GxTextLo,
+                            unselectedTextColor = com.guardian.app.ui.theme.GxTextLo
                         )
                     )
                     NavigationBarItem(
                         selected = screen == AppScreen.Settings,
                         onClick = { screen = AppScreen.Settings },
-                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(22.dp)) },
-                        label = { Text("Settings", fontSize = 11.sp, fontWeight = if (screen == AppScreen.Settings) FontWeight.Bold else FontWeight.Normal) },
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(20.dp)) },
+                        label = { Text("Settings", style = com.guardian.app.ui.theme.GxType.caption) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = CyberEmerald,
-                            selectedTextColor = CyberEmerald,
-                            indicatorColor = CyberEmeraldGlow,
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary
+                            selectedIconColor = com.guardian.app.ui.theme.GxPrimary,
+                            selectedTextColor = com.guardian.app.ui.theme.GxPrimary,
+                            indicatorColor = com.guardian.app.ui.theme.GxSurfaceAlt,
+                            unselectedIconColor = com.guardian.app.ui.theme.GxTextLo,
+                            unselectedTextColor = com.guardian.app.ui.theme.GxTextLo
                         )
                     )
                 }
@@ -187,7 +187,7 @@ fun GuardianApp(
                 label = "guardian-screen-transition",
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(DarkBackground)
+                    .background(com.guardian.app.ui.theme.GxBase)
                     .padding(padding)
             ) { target ->
                 val contentPadding = PaddingValues()
