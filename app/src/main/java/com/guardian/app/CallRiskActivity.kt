@@ -207,11 +207,6 @@ class CallRiskActivity : ComponentActivity() {
                     onLanguageSelect = { lang ->
                         selectedLanguage = lang
                         transcriber?.setLanguage(lang)
-                        agoraEngine?.setLanguage(when(lang) {
-                            LanguageMode.HINDI -> "hi"
-                            LanguageMode.ENGLISH -> "en"
-                            LanguageMode.AUTO -> "hi"
-                        })
                     },
                     onStartSpeaker = ::requestAndStartDetection,
                     onStartAgoraVoip = ::startAgoraCall,
@@ -302,14 +297,8 @@ class CallRiskActivity : ComponentActivity() {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         } else {
             startDetection()
-            val langCode = when (selectedLanguage) {
-                LanguageMode.HINDI -> "hi"
-                LanguageMode.ENGLISH -> "en"
-                LanguageMode.AUTO -> "hi"
-            }
             agoraEngine?.startCall(
                 channelName = "guardian_secure_call",
-                language = langCode,
                 listener = object : AgoraTranscriptListener {
                     override fun onTranscriptReceived(text: String, isFinal: Boolean, speakerUid: Int) {
                         val speaker = if (speakerUid > 0) Speaker.LOCAL else Speaker.REMOTE
