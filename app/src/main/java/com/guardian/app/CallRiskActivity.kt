@@ -347,9 +347,11 @@ class CallRiskActivity : ComponentActivity() {
                     }
                 },
                 onError = { err ->
-                    Log.e("Guardian", "Bhashini error: $err, falling back to Agora")
-                    runOnUiThread {
-                        fallbackToAgora()
+                    Log.e("Guardian", "Bhashini error: $err")
+                    if (isAgoraMode) {
+                        runOnUiThread {
+                            fallbackToAgora()
+                        }
                     }
                 },
                 onPcmChunk = { pcmChunk ->
@@ -360,8 +362,10 @@ class CallRiskActivity : ComponentActivity() {
             usingBhashini = true
             Log.d("Guardian", "Bhashini pipeline started for lang: $prefLang")
         } catch (e: Exception) {
-            Log.e("Guardian", "Bhashini init failed, using Agora fallback", e)
-            fallbackToAgora()
+            Log.e("Guardian", "Bhashini init failed: ${e.message}", e)
+            if (isAgoraMode) {
+                fallbackToAgora()
+            }
         }
     }
 
@@ -427,7 +431,6 @@ class CallRiskActivity : ComponentActivity() {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         } else {
             startDetection()
-            startAnalysisPipeline()
         }
     }
 

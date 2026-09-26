@@ -228,15 +228,15 @@ class AndroidSpeechTranscriber(private val context: Context) : StreamingTranscri
         this.listener = listener
         this.currentLanguage = languageMode
         this.isRunning = true
-        restartScheduled = false
-        setupAndListen()
+        this.restartScheduled = false
+        initAndListen()
     }
 
     override fun setLanguage(languageMode: LanguageMode) {
         if (currentLanguage == languageMode) return
         currentLanguage = languageMode
         if (isRunning) {
-            setupAndListen()
+            startListeningIntent()
         }
     }
 
@@ -248,110 +248,83 @@ class AndroidSpeechTranscriber(private val context: Context) : StreamingTranscri
             recognizer?.stopListening()
             recognizer?.cancel()
             recognizer?.destroy()
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
         recognizer = null
         listener = null
     }
 
-    private fun setupAndListen() {
+    private fun initAndListen() {
         mainHandler.post {
             if (!isRunning) return@post
-            try {
-                recognizer?.cancel()
-                recognizer?.destroy()
-            } catch (_: Exception) {
-            }
-
-            recognizer = createRecognizer()
             if (recognizer == null) {
-                listener?.onTranscriptionError("Speech recognizer is not available on this device.")
-                return@post
+                recognizer = SpeechRecognizer.createSpeechRecognizer(context.applicationContext)
+                recognizer?.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {}
+                    override fun onBeginningOfSpeech() {}
+
+                    override fun onRmsChanged(rmsdB: Float) {
+                        listener?.onRmsChanged(rmsdB)
+                    }
+
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {}
+
+                    override fun onError(error: Int) {
+                        if (!isRunning) return
+                        scheduleRestart(300L)
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        if (!isRunning) return
+                        val textList = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        val text = textList?.firstOrNull()?.trim().orEmpty()
+                        if (text.isNotBlank()) {
+                            listener?.onTranscript(text, true)
+                        }
+                        scheduleRestart(100L)
+                    }
+
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        if (!isRunning) return
+                        val textList = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        val text = textList?.firstOrNull()?.trim().orEmpty()
+                        if (text.isNotBlank()) {
+                            listener?.onTranscript(text, false)
+                        }
+                    }
+
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
             }
-
-            recognizer?.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {}
-                override fun onBeginningOfSpeech() {}
-
-                override fun onRmsChanged(rmsdB: Float) {
-                    listener?.onRmsChanged(rmsdB)
-                }
-
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {}
-
-                override fun onError(error: Int) {
-                    if (!isRunning) return
-                    // Common non-fatal speech codes: ERROR_NO_MATCH (7), ERROR_SPEECH_TIMEOUT (6), ERROR_CLIENT (5)
-                    // Auto-restart silently to keep listening to the speaker continuous
-                    scheduleRestart(350L)
-                }
-
-                override fun onResults(results: Bundle?) {
-                    if (!isRunning) return
-                    val textList = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val text = textList?.firstOrNull()?.trim().orEmpty()
-                    if (text.isNotBlank()) {
-                        listener?.onTranscript(text, true)
-                    }
-                    scheduleRestart(150L)
-                }
-
-                override fun onPartialResults(partialResults: Bundle?) {
-                    if (!isRunning) return
-                    val textList = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val text = textList?.firstOrNull()?.trim().orEmpty()
-                    if (text.isNotBlank()) {
-                        listener?.onTranscript(text, false)
-                    }
-                }
-
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
 
             startListeningIntent()
         }
     }
 
-    private fun createRecognizer(): SpeechRecognizer? {
-        return try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
-                SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
-            ) {
-                SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-            } else {
-                SpeechRecognizer.createSpeechRecognizer(context)
-            }
-        } catch (_: Exception) {
-            try {
-                SpeechRecognizer.createSpeechRecognizer(context)
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
-
     private fun startListeningIntent() {
-        val activeRecognizer = recognizer ?: return
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+        mainHandler.post {
+            if (!isRunning) return@post
+            val activeRecognizer = recognizer ?: return@post
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
 
-            val langCode = when (currentLanguage) {
-                LanguageMode.HINDI -> "hi-IN"
-                LanguageMode.ENGLISH -> "en-IN"
-                LanguageMode.AUTO -> Locale.getDefault().toLanguageTag()
+                val langCode = when (currentLanguage) {
+                    LanguageMode.HINDI -> "hi-IN"
+                    LanguageMode.ENGLISH -> "en-IN"
+                    LanguageMode.AUTO -> "en-IN"
+                }
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, langCode)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langCode)
+                putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("hi-IN", "en-IN", "en-US"))
             }
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, langCode)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langCode)
-            putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("hi-IN", "en-IN", "en-US"))
-        }
 
-        try {
-            activeRecognizer.startListening(intent)
-        } catch (_: Exception) {
-            scheduleRestart(500L)
+            try {
+                activeRecognizer.startListening(intent)
+            } catch (_: Exception) {
+                scheduleRestart(500L)
+            }
         }
     }
 
@@ -361,7 +334,7 @@ class AndroidSpeechTranscriber(private val context: Context) : StreamingTranscri
             mainHandler.postDelayed({
                 restartScheduled = false
                 if (isRunning) {
-                    setupAndListen()
+                    startListeningIntent()
                 }
             }, delayMs)
         }

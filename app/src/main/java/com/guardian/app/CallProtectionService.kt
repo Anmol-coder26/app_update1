@@ -46,22 +46,22 @@ class CallProtectionService : Service() {
         val notification = buildForegroundNotification(action, number)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     startForeground(
                         NOTIFICATION_ID,
                         notification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                     )
                 } else {
-                    startForeground(
-                        NOTIFICATION_ID,
-                        notification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
-                    )
+                    startForeground(NOTIFICATION_ID, notification)
                 }
             } catch (e: Exception) {
                 Log.w("GuardianCallService", "Fallback startForeground: ${e.message}")
-                startForeground(NOTIFICATION_ID, notification)
+                try {
+                    startForeground(NOTIFICATION_ID, notification)
+                } catch (e2: Exception) {
+                    Log.e("GuardianCallService", "Failed to startForeground: ${e2.message}")
+                }
             }
         } else {
             startForeground(NOTIFICATION_ID, notification)
