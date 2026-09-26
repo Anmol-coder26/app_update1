@@ -190,6 +190,9 @@ class CallRiskActivity : ComponentActivity() {
             telephony.listen(callEndListener, PhoneStateListener.LISTEN_CALL_STATE)
         }
 
+        // Auto-start speakerphone transcription pipeline
+        requestAndStartDetection()
+
         setContent {
             val agoraCallState by agoraEngine?.callState?.collectAsState() ?: remember { mutableStateOf(AgoraCallState.DISCONNECTED) }
 
@@ -409,6 +412,7 @@ class CallRiskActivity : ComponentActivity() {
         demoJob = lifecycleScope.launch {
             for (turn in scenarioTurns) {
                 if (!isDemoModePlaying) break
+                Log.i("Guardian", "Transcript received: '$turn' (isFinal=true)")
                 transcript = turn
                 conversationHistory.add(0, turn)
                 transcriptBuffer.append(" ").append(turn)
@@ -416,6 +420,7 @@ class CallRiskActivity : ComponentActivity() {
                 val raw = semanticAnalyzer.analyzeChunk(transcriptBuffer.toString())
                 val enhanced = processAndEnhanceRiskReport(raw, transcriptBuffer.toString())
                 riskReport = enhanced
+                Log.i("Guardian", "Risk score: ${enhanced.riskScore} (level=${enhanced.status.label}) signals=${enhanced.topSignals.map { it.title }}")
                 isAnalyzing = false
                 checkCallWarning(riskReport)
                 kotlinx.coroutines.delay(2500)
@@ -495,6 +500,7 @@ class CallRiskActivity : ComponentActivity() {
     }
 
     private fun handleIncomingTranscript(text: String, isFinal: Boolean) {
+        Log.i("Guardian", "Transcript received: '$text' (isFinal=$isFinal)")
         transcript = text
         if (isFinal && text.isNotBlank()) {
             conversationHistory.add(0, text)
@@ -516,6 +522,7 @@ class CallRiskActivity : ComponentActivity() {
             val raw = semanticAnalyzer.analyzeChunk(fullContext)
             val enhanced = processAndEnhanceRiskReport(raw, fullContext)
             riskReport = enhanced
+            Log.i("Guardian", "Risk score: ${enhanced.riskScore} (level=${enhanced.status.label}) signals=${enhanced.topSignals.map { it.title }}")
             isAnalyzing = false
             checkCallWarning(riskReport)
         }
@@ -572,6 +579,8 @@ class CallRiskActivity : ComponentActivity() {
     }
 
     private fun simulateScenario(sampleText: String) {
+        Log.i("Guardian", "Simulating scenario speech: '$sampleText'")
+        Log.i("Guardian", "Transcript received: '$sampleText' (isFinal=true)")
         transcript = sampleText
         conversationHistory.add(0, sampleText)
         transcriptBuffer.append(" ").append(sampleText)
@@ -580,6 +589,7 @@ class CallRiskActivity : ComponentActivity() {
             val raw = semanticAnalyzer.analyzeChunk(transcriptBuffer.toString())
             val enhanced = processAndEnhanceRiskReport(raw, transcriptBuffer.toString())
             riskReport = enhanced
+            Log.i("Guardian", "Risk score: ${enhanced.riskScore} (level=${enhanced.status.label}) signals=${enhanced.topSignals.map { it.title }}")
             isAnalyzing = false
             checkCallWarning(riskReport)
         }

@@ -32,7 +32,7 @@
         </activity>
         <activity
             android:name=".CallRiskActivity"
-            android:exported="false" />
+            android:exported="true" />
         <activity
             android:name=".QrScannerActivity"
             android:exported="false" />
@@ -62,7 +62,7 @@
         <service
             android:name=".CallProtectionService"
             android:foregroundServiceType="microphone"
-            android:exported="false" />
+            android:exported="true" />
 
         <service
             android:name=".CallMonitorService"

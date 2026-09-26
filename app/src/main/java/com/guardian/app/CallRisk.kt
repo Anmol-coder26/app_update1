@@ -8,6 +8,7 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import java.util.Locale
 
 enum class RiskStatus(val label: String) {
@@ -259,18 +260,26 @@ class AndroidSpeechTranscriber(private val context: Context) : StreamingTranscri
             if (recognizer == null) {
                 recognizer = SpeechRecognizer.createSpeechRecognizer(context.applicationContext)
                 recognizer?.setRecognitionListener(object : RecognitionListener {
-                    override fun onReadyForSpeech(params: Bundle?) {}
-                    override fun onBeginningOfSpeech() {}
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        Log.d("GuardianSpeech", "SpeechRecognizer ready for speech (lang=$currentLanguage)")
+                    }
+
+                    override fun onBeginningOfSpeech() {
+                        Log.d("GuardianSpeech", "SpeechRecognizer detected beginning of speech")
+                    }
 
                     override fun onRmsChanged(rmsdB: Float) {
                         listener?.onRmsChanged(rmsdB)
                     }
 
                     override fun onBufferReceived(buffer: ByteArray?) {}
-                    override fun onEndOfSpeech() {}
+                    override fun onEndOfSpeech() {
+                        Log.d("GuardianSpeech", "SpeechRecognizer end of speech segment")
+                    }
 
                     override fun onError(error: Int) {
                         if (!isRunning) return
+                        Log.w("GuardianSpeech", "SpeechRecognizer onError code: $error")
                         scheduleRestart(300L)
                     }
 
@@ -278,6 +287,7 @@ class AndroidSpeechTranscriber(private val context: Context) : StreamingTranscri
                         if (!isRunning) return
                         val textList = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val text = textList?.firstOrNull()?.trim().orEmpty()
+                        Log.i("GuardianSpeech", "SpeechRecognizer onResults: '$text'")
                         if (text.isNotBlank()) {
                             listener?.onTranscript(text, true)
                         }
@@ -289,6 +299,7 @@ class AndroidSpeechTranscriber(private val context: Context) : StreamingTranscri
                         val textList = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val text = textList?.firstOrNull()?.trim().orEmpty()
                         if (text.isNotBlank()) {
+                            Log.d("GuardianSpeech", "SpeechRecognizer onPartialResults: '$text'")
                             listener?.onTranscript(text, false)
                         }
                     }
