@@ -537,4 +537,34 @@ class SemanticAnalyzer(
             finalReport
         }
     }
+
+    suspend fun analyzeNotificationMultilingual(
+        source: String,
+        title: String,
+        body: String,
+        userLang: String = "en"
+    ): RiskReport {
+        val rawMessage = "Notification from $source. Title: $title. Body: $body"
+        if (userLang.isBlank() || userLang.equals("en", ignoreCase = true)) {
+            return analyzeChunk(rawMessage)
+        }
+        val translatedTitle = com.guardian.app.bhashini.BhashiniTranslateClient.translate(title, userLang, "en")
+        val translatedBody = com.guardian.app.bhashini.BhashiniTranslateClient.translate(body, userLang, "en")
+        val englishMessage = "Notification from $source. Title: $translatedTitle. Body: $translatedBody"
+        val report = analyzeChunk(englishMessage)
+        val localizedExplanation = com.guardian.app.bhashini.BhashiniTranslateClient.translate(report.explanationEn, "en", userLang)
+        return report.copy(explanationHi = localizedExplanation)
+    }
+
+    suspend fun analyzeUrlMultilingual(
+        url: String,
+        userLang: String = "en"
+    ): RiskReport {
+        val report = analyzeChunk("Inspecting URL link: $url")
+        if (userLang.isBlank() || userLang.equals("en", ignoreCase = true)) {
+            return report
+        }
+        val localizedExplanation = com.guardian.app.bhashini.BhashiniTranslateClient.translate(report.explanationEn, "en", userLang)
+        return report.copy(explanationHi = localizedExplanation)
+    }
 }

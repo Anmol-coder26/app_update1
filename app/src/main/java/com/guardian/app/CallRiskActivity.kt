@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -100,6 +101,8 @@ class CallRiskActivity : ComponentActivity() {
     private var demoJob: Job? = null
     private var warningPlayer: com.guardian.app.callprotect.CriticalWarningPlayer? = null
     private var currentCallerNumber by mutableStateOf("")
+    private var bhashiniPipeline: com.guardian.app.bhashini.GuardianAnalysisPipeline? = null
+    private var usingBhashini = false
 
     @Suppress("DEPRECATION")
     private val callEndListener = object : PhoneStateListener() {
@@ -205,14 +208,55 @@ class CallRiskActivity : ComponentActivity() {
 
     private fun checkCallWarning(report: RiskReport) {
         if (report.riskScore >= 85) {
-            val msg = if (selectedLanguage == LanguageMode.HINDI) {
+            val prefLang = getSelectedLanguageFromPrefs()
+            val msg = if (prefLang == "hi" || selectedLanguage == LanguageMode.HINDI) {
                 "उच्च जोखिम धोखाधड़ी कॉल! आपकी वित्तीय जानकारी खतरे में हो सकती है। अभी कॉल समाप्त करें।"
             } else {
                 "High risk scam call! Your financial information may be in danger. End this call now."
             }
-            val langTag = if (selectedLanguage == LanguageMode.HINDI) "hi-IN" else "en-IN"
-            warningPlayer?.playWarning(msg, langTag)
+            warningPlayer?.playBhashiniTts(msg, prefLang)
         }
+    }
+
+    private fun startAnalysisPipeline() {
+        try {
+            val prefLang = getSelectedLanguageFromPrefs()
+            bhashiniPipeline = com.guardian.app.bhashini.GuardianAnalysisPipeline(
+                analyzer = semanticAnalyzer,
+                onRiskUpdate = { report ->
+                    runOnUiThread {
+                        riskReport = report
+                        checkCallWarning(report)
+                    }
+                },
+                onError = { err ->
+                    Log.e("Guardian", "Bhashini error: $err, falling back to Agora")
+                    runOnUiThread {
+                        fallbackToAgora()
+                    }
+                }
+            )
+            bhashiniPipeline?.start(language = prefLang)
+            usingBhashini = true
+            Log.d("Guardian", "Bhashini pipeline started for lang: $prefLang")
+        } catch (e: Exception) {
+            Log.e("Guardian", "Bhashini init failed, using Agora fallback", e)
+            fallbackToAgora()
+        }
+    }
+
+    private fun fallbackToAgora() {
+        if (usingBhashini) {
+            bhashiniPipeline?.stop()
+            bhashiniPipeline = null
+            usingBhashini = false
+        }
+        startAgoraCall()
+    }
+
+    private fun getSelectedLanguageFromPrefs(): String {
+        return getSharedPreferences("guardian_prefs", MODE_PRIVATE)
+            .getString("preferred_language", "hi") ?: "hi"
     }
 
     private fun startFullDemoSimulation(scenarioIndex: Int) {
@@ -261,6 +305,7 @@ class CallRiskActivity : ComponentActivity() {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         } else {
             startDetection()
+            startAnalysisPipeline()
         }
     }
 
@@ -366,6 +411,12 @@ class CallRiskActivity : ComponentActivity() {
                     )
                 )
             }
+        }
+
+        if (usingBhashini) {
+            bhashiniPipeline?.stop()
+            bhashiniPipeline = null
+            usingBhashini = false
         }
 
         transcriber?.stop()

@@ -30,6 +30,24 @@ android {
 
         val agoraAppId = localProperties.getProperty("AGORA_APP_ID") ?: ""
         buildConfigField("String", "AGORA_APP_ID", "\"$agoraAppId\"")
+
+        val bhashiniUserId = localProperties.getProperty("BHASHINI_USER_ID") ?: ""
+        buildConfigField("String", "BHASHINI_USER_ID", "\"$bhashiniUserId\"")
+
+        val bhashiniUlcaKey = localProperties.getProperty("BHASHINI_ULCA_API_KEY") ?: ""
+        buildConfigField("String", "BHASHINI_ULCA_API_KEY", "\"$bhashiniUlcaKey\"")
+
+        val bhashiniInferenceKey = localProperties.getProperty("BHASHINI_INFERENCE_API_KEY") ?: ""
+        buildConfigField("String", "BHASHINI_INFERENCE_API_KEY", "\"$bhashiniInferenceKey\"")
+
+        val bhashiniPipelineId = localProperties.getProperty("BHASHINI_PIPELINE_ID") ?: ""
+        buildConfigField("String", "BHASHINI_PIPELINE_ID", "\"$bhashiniPipelineId\"")
+
+        val bhashiniSttEndpoint = localProperties.getProperty("BHASHINI_STT_ENDPOINT") ?: ""
+        buildConfigField("String", "BHASHINI_STT_ENDPOINT", "\"$bhashiniSttEndpoint\"")
+
+        val bhashiniRestEndpoint = localProperties.getProperty("BHASHINI_REST_ENDPOINT") ?: ""
+        buildConfigField("String", "BHASHINI_REST_ENDPOINT", "\"$bhashiniRestEndpoint\"")
     }
 
     compileOptions {
@@ -94,6 +112,9 @@ dependencies {
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
+
+    // OkHttp for Bhashini Streaming STT WebSocket & REST Translation/TTS
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")

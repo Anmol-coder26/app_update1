@@ -419,6 +419,94 @@ fun OnboardingScreen(name: String, onComplete: () -> Unit) {
                 )
             }
 
+            // 7. Choose Scam Warning Language (Bhashini AI)
+            item {
+                val languages = listOf(
+                    "hi" to "Hindi (हिंदी)",
+                    "en" to "English",
+                    "ta" to "Tamil (தமிழ்)",
+                    "te" to "Telugu (తెలుగు)",
+                    "bn" to "Bengali (বাংলা)",
+                    "mr" to "Marathi (मराठी)",
+                    "kn" to "Kannada (ಕನ್ನಡ)",
+                    "ml" to "Malayalam (മലയാളം)",
+                    "gu" to "Gujarati (ગુજરાતી)",
+                    "pa" to "Punjabi (ਪੰਜਾਬੀ)"
+                )
+                var currentSelectedLang by remember {
+                    mutableStateOf(
+                        context.getSharedPreferences("guardian_prefs", android.content.Context.MODE_PRIVATE)
+                            .getString("preferred_language", "hi") ?: "hi"
+                    )
+                }
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.4f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp)
+                    ) {
+                        Text(
+                            "7. Scam Warning Language",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = TextPrimary
+                        )
+                        Text(
+                            "Choose your language for live scam call warnings and Bhashini AI audio alerts.",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
+                        )
+
+                        @OptIn(ExperimentalLayoutApi::class)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            languages.forEach { (code, label) ->
+                                val isSelected = currentSelectedLang == code
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = {
+                                        currentSelectedLang = code
+                                        context.getSharedPreferences("guardian_prefs", android.content.Context.MODE_PRIVATE)
+                                            .edit()
+                                            .putString("preferred_language", code)
+                                            .apply()
+                                    },
+                                    label = {
+                                        Text(
+                                            label,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = CyberEmerald,
+                                        selectedLabelColor = Color(0xFF022C22),
+                                        containerColor = DarkSurface,
+                                        labelColor = TextSecondary
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        borderColor = if (isSelected) CyberEmerald else BorderSubtle,
+                                        selectedBorderColor = CyberEmerald,
+                                        enabled = true,
+                                        selected = isSelected
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Bottom Continue Action
             item {
                 Spacer(Modifier.height(14.dp))
