@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Guardian</string>
+    <string name="accessibility_description">Guardian checks clicked links in WhatsApp, SMS, and browsers for phishing, fake bank portals, and malware before they open.</string>
+</resources>
