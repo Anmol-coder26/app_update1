@@ -1,5 +1,6 @@
 package com.guardian.app
 
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -27,7 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Security
@@ -47,59 +48,118 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private val GxDanger = CoralRed
+private val GxWarning = AmberWarning
+private val GxSurface = DarkSurface
+private val GxSurfaceAlt = DarkSurfaceElevated
+private val GxTextHi = TextPrimary
+private val GxTextMid = TextSecondary
+private val GxTextLo = TextMuted
 
 data class LinkVerdict(
     val url: String,
+    val score: Int,
     val status: RiskStatus,
     val title: String,
-    val detail: String
+    val detail: String,
+    val allowProceed: Boolean = true
 )
 
 class LinkCheckActivity : ComponentActivity() {
 
+    private lateinit var semanticAnalyzer: SemanticAnalyzer
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val targetUrl = intent?.dataString ?: ""
-        if (targetUrl.isBlank()) {
+        val uri = intent?.data ?: run {
             finish()
             return
         }
 
-        Log.d("GuardianLinkCheck", "Intercepted Intent URL: $targetUrl")
-        val verdict = evaluateLinkSafety(targetUrl)
+        semanticAnalyzer = SemanticAnalyzer(this)
+        val targetUrl = uri.toString()
+        Log.i("GuardianLinkCheck", "Intercepted Intent URL: $targetUrl")
 
-        if (verdict.status == RiskStatus.Low) {
-            // Safe Link: Show confirmation toast and forward to default browser
-            Toast.makeText(this, "✅ Guardian: Domain Verified Safe", Toast.LENGTH_SHORT).show()
-            openInExternalBrowser(targetUrl)
-            finish()
-            return
+        lifecycleScope.launch {
+            val verdict = withContext(Dispatchers.IO) {
+                evaluateLink(targetUrl)
+            }
+
+            Log.i("GuardianLinkCheck", "URL verdict: score=${verdict.score}, status=${verdict.status.label}")
+
+            when {
+                verdict.score < 40 -> {
+                    Toast.makeText(this@LinkCheckActivity, "✅ Guardian: Domain Clean — Opening", Toast.LENGTH_SHORT).show()
+                    forwardToBrowser(uri)
+                }
+                verdict.score < 70 -> {
+                    showWarning(uri, verdict, allowProceed = true)
+                }
+                else -> {
+                    showWarning(uri, verdict, allowProceed = false)
+                }
+            }
         }
+    }
 
-        // Suspicious or Scam Link: Display Interactive Safety Interception Dialog
+    private fun forwardToBrowser(uri: Uri) {
+        try {
+            val browserIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+                setPackage("com.android.chrome")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(browserIntent)
+        } catch (e: ActivityNotFoundException) {
+            try {
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+                    removeCategory(Intent.CATEGORY_BROWSABLE)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                val resolveInfos = packageManager.queryIntentActivities(fallbackIntent, PackageManager.MATCH_DEFAULT_ONLY)
+                val targetApp = resolveInfos.firstOrNull { it.activityInfo.packageName != packageName }
+                if (targetApp != null) {
+                    fallbackIntent.setClassName(targetApp.activityInfo.packageName, targetApp.activityInfo.name)
+                    startActivity(fallbackIntent)
+                } else {
+                    val chooser = Intent.createChooser(fallbackIntent, "Open with").apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    startActivity(chooser)
+                }
+            } catch (_: Exception) {}
+        }
+        finish()
+    }
+
+    private fun showWarning(uri: Uri, verdict: LinkVerdict, allowProceed: Boolean) {
         setContent {
             GuardianTheme {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(0x99000000))
+                        .background(Color(0xCC000000))
                         .padding(20.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     LinkWarningDialog(
                         verdict = verdict,
+                        allowProceed = allowProceed,
                         onProceed = {
-                            openInExternalBrowser(targetUrl)
-                            finish()
+                            forwardToBrowser(uri)
                         },
                         onBlock = {
-                            Toast.makeText(this@LinkCheckActivity, "Blocked malicious link navigation", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@LinkCheckActivity, "Blocked dangerous link navigation", Toast.LENGTH_SHORT).show()
                             finish()
                         },
                         onCopy = {
                             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("URL", targetUrl))
+                            clipboard.setPrimaryClip(ClipData.newPlainText("URL", verdict.url))
                             Toast.makeText(this@LinkCheckActivity, "Link copied to clipboard", Toast.LENGTH_SHORT).show()
                         }
                     )
@@ -108,68 +168,46 @@ class LinkCheckActivity : ComponentActivity() {
         }
     }
 
-    private fun openInExternalBrowser(url: String) {
-        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-            addCategory(Intent.CATEGORY_BROWSABLE)
-        }
+    private fun evaluateLink(url: String): LinkVerdict {
+        val lower = url.lowercase().trim()
 
-        val resolveInfos = packageManager.queryIntentActivities(browserIntent, PackageManager.MATCH_DEFAULT_ONLY)
-        val targetApp = resolveInfos.firstOrNull { it.activityInfo.packageName != packageName }
-            ?: resolveInfos.firstOrNull { it.activityInfo.packageName.contains("chrome") || it.activityInfo.packageName.contains("browser") }
-
-        if (targetApp != null) {
-            browserIntent.setClassName(targetApp.activityInfo.packageName, targetApp.activityInfo.name)
-            browserIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            try {
-                startActivity(browserIntent)
-            } catch (e: Exception) {
-                Log.e("GuardianLinkCheck", "Cannot launch browser: ${e.message}")
+        return when {
+            lower.contains(".apk") || lower.contains("login-kyc") || lower.contains("rbi-claim") ||
+            lower.contains("free-gift") || lower.contains("update-pan") || lower.contains("bank-verify") ||
+            lower.contains("digital-arrest") || lower.contains("anydesk") || lower.contains("electricity-bill-pay") ||
+            lower.contains("upi-verify-kyc") || lower.contains("sbi-verify") -> {
+                LinkVerdict(
+                    url = url,
+                    score = 90,
+                    status = RiskStatus.High,
+                    title = "🚨 DANGEROUS PHISHING / MALWARE LINK",
+                    detail = "This destination has been flagged for active banking credential theft, digital arrest extortion, or unauthorized APK downloads.",
+                    allowProceed = false
+                )
             }
-        } else {
-            // Fallback chooser
-            try {
-                val chooser = Intent.createChooser(browserIntent, "Open with").apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                startActivity(chooser)
-            } catch (_: Exception) {}
-        }
-    }
 
-    companion object {
-        fun evaluateLinkSafety(url: String): LinkVerdict {
-            val lower = url.lowercase().trim()
+            lower.contains("bit.ly") || lower.contains("tinyurl.com") || lower.contains("is.gd") ||
+            lower.contains(".xyz") || lower.contains(".top") || lower.contains(".cc") || lower.contains(".club") ||
+            lower.contains("suspicious-test") -> {
+                LinkVerdict(
+                    url = url,
+                    score = 65,
+                    status = RiskStatus.Suspicious,
+                    title = "⚠️ SUSPICIOUS MASKED URL",
+                    detail = "This link uses a URL shortener or unverified domain registry that conceals the true landing page. Proceed with caution.",
+                    allowProceed = true
+                )
+            }
 
-            return when {
-                lower.contains(".apk") || lower.contains("login-kyc") || lower.contains("rbi-claim") ||
-                lower.contains("free-gift") || lower.contains("update-pan") || lower.contains("bank-verify") ||
-                lower.contains("digital-arrest") || lower.contains("anydesk") || lower.contains("electricity-bill-pay") -> {
-                    LinkVerdict(
-                        url = url,
-                        status = RiskStatus.High,
-                        title = "🚨 DANGEROUS PHISHING / MALWARE LINK",
-                        detail = "This destination has been flagged for active banking credential theft, digital arrest extortion, or unauthorized APK downloads."
-                    )
-                }
-
-                lower.contains("bit.ly") || lower.contains("tinyurl.com") || lower.contains("is.gd") ||
-                lower.contains(".xyz") || lower.contains(".top") || lower.contains(".cc") || lower.contains(".club") -> {
-                    LinkVerdict(
-                        url = url,
-                        status = RiskStatus.Suspicious,
-                        title = "⚠️ SUSPICIOUS MASKED URL",
-                        detail = "This link uses a URL shortener or unverified domain registry that conceals the true landing page. Proceed with caution."
-                    )
-                }
-
-                else -> {
-                    LinkVerdict(
-                        url = url,
-                        status = RiskStatus.Low,
-                        title = "✅ DOMAIN VERIFIED CLEAN",
-                        detail = "Standard trusted web domain. No active threat intelligence flags detected."
-                    )
-                }
+            else -> {
+                LinkVerdict(
+                    url = url,
+                    score = 10,
+                    status = RiskStatus.Low,
+                    title = "✅ DOMAIN VERIFIED CLEAN",
+                    detail = "Standard trusted web domain. No active threat intelligence flags detected.",
+                    allowProceed = true
+                )
             }
         }
     }
@@ -178,16 +216,16 @@ class LinkCheckActivity : ComponentActivity() {
 @Composable
 fun LinkWarningDialog(
     verdict: LinkVerdict,
+    allowProceed: Boolean,
     onProceed: () -> Unit,
     onBlock: () -> Unit,
     onCopy: () -> Unit
 ) {
-    val isHighRisk = verdict.status == RiskStatus.High
-    val accentColor = if (isHighRisk) CoralRed else AmberWarning
-    val containerBg = if (isHighRisk) Color(0xFF280B0B) else Color(0xFF261805)
+    val isCritical = verdict.score >= 70
+    val accentColor = if (isCritical) GxDanger else GxWarning
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = containerBg),
+        colors = CardDefaults.cardColors(containerColor = GxSurface),
         shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.5.dp, accentColor),
         modifier = Modifier.fillMaxWidth()
@@ -204,7 +242,7 @@ fun LinkWarningDialog(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = if (isHighRisk) Icons.Default.WarningAmber else Icons.Default.Security,
+                            imageVector = if (isCritical) Icons.Default.WarningAmber else Icons.Default.Security,
                             contentDescription = null,
                             tint = accentColor,
                             modifier = Modifier.size(24.dp)
@@ -216,16 +254,16 @@ fun LinkWarningDialog(
 
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "Guardian Link Shield",
+                        "Guardian Link Shield — ${verdict.score}% Risk",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextSecondary
+                        color = accentColor
                     )
                     Text(
                         verdict.title,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = accentColor
+                        color = GxTextHi
                     )
                 }
             }
@@ -233,8 +271,8 @@ fun LinkWarningDialog(
             Spacer(Modifier.height(14.dp))
 
             Text(
-                verdict.detail,
-                color = TextPrimary,
+                text = verdict.detail,
+                color = GxTextMid,
                 fontSize = 13.sp,
                 lineHeight = 18.sp
             )
@@ -242,9 +280,9 @@ fun LinkWarningDialog(
             Spacer(Modifier.height(12.dp))
 
             Surface(
-                color = DarkBackground.copy(alpha = 0.8f),
+                color = GxSurfaceAlt,
                 shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, BorderSubtle),
+                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -252,8 +290,8 @@ fun LinkWarningDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        verdict.url.take(80) + if (verdict.url.length > 80) "..." else "",
-                        color = TextSecondary,
+                        text = verdict.url.take(80) + if (verdict.url.length > 80) "..." else "",
+                        color = GxTextLo,
                         fontSize = 11.sp,
                         maxLines = 2,
                         modifier = Modifier.weight(1f)
@@ -274,22 +312,27 @@ fun LinkWarningDialog(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                OutlinedButton(
-                    onClick = onProceed,
-                    border = BorderStroke(1.dp, TextMuted),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Proceed (Unsafe)", color = TextSecondary, fontSize = 11.sp)
+                if (allowProceed) {
+                    OutlinedButton(
+                        onClick = onProceed,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Proceed", color = GxTextMid, fontSize = 12.sp)
+                    }
                 }
 
                 Button(
                     onClick = onBlock,
-                    colors = ButtonDefaults.buttonColors(containerColor = CoralRed, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = GxDanger, contentColor = Color.White),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Block & Return", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Block, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (allowProceed) "Block" else "Block Link", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

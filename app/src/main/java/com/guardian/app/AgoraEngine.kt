@@ -2,6 +2,9 @@ package com.guardian.app
 
 import android.content.Context
 import android.util.Log
+import com.guardian.app.agora.AgoraAudioFrameBridge
+import com.guardian.app.bhashini.BhashiniDualStreamManager
+import com.guardian.app.bhashini.Speaker
 import com.guardian.app.convoaiApi.ConversationalAIAPIConfig
 import com.guardian.app.convoaiApi.ConversationalAIAPIImpl
 import com.guardian.app.convoaiApi.IConversationalAIAPI
@@ -52,6 +55,9 @@ class AgoraEngine(
     private var convoAiApi: IConversationalAIAPI? = null
     private val scope = CoroutineScope(Dispatchers.Main)
 
+    private var frameBridge: AgoraAudioFrameBridge? = null
+    private var dualStreamManager: BhashiniDualStreamManager? = null
+
     private val _callState = MutableStateFlow(AgoraCallState.DISCONNECTED)
     val callState: StateFlow<AgoraCallState> = _callState.asStateFlow()
 
@@ -61,6 +67,7 @@ class AgoraEngine(
     private var activeRtmToken: String = ""
     private var listener: AgoraTranscriptListener? = null
     private var agentId: String? = null
+    private var currentLanguage: String = "hi"
 
     private val rtcEventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
@@ -94,6 +101,10 @@ class AgoraEngine(
         initRtcEngine()
     }
 
+    fun setLanguage(lang: String) {
+        currentLanguage = lang
+    }
+
     private fun initRtcEngine() {
         val appId = BuildConfig.AGORA_APP_ID
         if (appId.isBlank()) {
@@ -103,7 +114,7 @@ class AgoraEngine(
 
         try {
             val config = RtcEngineConfig().apply {
-                mContext = context.applicationContext
+                mContext = context.applicationContext ?: context
                 mAppId = appId
                 mEventHandler = rtcEventHandler
                 mChannelProfile = Constants.CHANNEL_PROFILE_COMMUNICATION
@@ -122,23 +133,19 @@ class AgoraEngine(
     fun startCall(
         channelName: String = "guardian_secure_call",
         uid: Int = (1000..9999).random(),
+        language: String = "hi",
         listener: AgoraTranscriptListener
     ) {
         this.listener = listener
         this.activeChannel = channelName
         this.localUid = uid
+        this.currentLanguage = language
 
         _callState.value = AgoraCallState.CONNECTING
         listener.onCallStateChanged(AgoraCallState.CONNECTING, "Fetching security tokens...")
 
         scope.launch {
             try {
-                val tokens = fetchRteTokens(channelName, uid)
-                activeRtcToken = tokens.optString("rtcToken", "")
-                activeRtmToken = tokens.optString("rtmToken", "")
-
-                Log.d("AgoraDebug", "Token has RTM privileges: $activeRtmToken")
-
                 val engine = rtcEngine ?: run {
                     initRtcEngine()
                     rtcEngine
@@ -150,27 +157,55 @@ class AgoraEngine(
                     return@launch
                 }
 
-                // 1. Join RTC channel for voice audio transmission
-                engine.setClientRole(Constants.CLIENT_ROLE_BROADCASTER)
-                val joinResult = engine.joinChannel(activeRtcToken, channelName, null, uid)
-                if (joinResult != Constants.ERR_OK) {
-                    _callState.value = AgoraCallState.ERROR
-                    listener.onCallStateChanged(AgoraCallState.ERROR, "Join failed (code: $joinResult)")
-                    return@launch
+                // Initialize Dual-Stream Bhashini & Agora Audio Frame Bridge
+                dualStreamManager = BhashiniDualStreamManager(sourceLanguage = currentLanguage).also { manager ->
+                    manager.start()
+                    scope.launch {
+                        manager.transcripts.collect { line ->
+                            val speakerUid = if (line.speaker == Speaker.LOCAL) localUid else -1
+                            listener.onTranscriptReceived(line.text, line.isFinal, speakerUid)
+                        }
+                    }
                 }
 
-                // 2. Initialize RTM & Official ConversationalAIAPIImpl Toolkit
-                initializeConvoAi(
-                    userId = uid.toString(),
-                    rtmToken = activeRtmToken,
-                    channelName = channelName,
-                    engine = engine
-                )
+                frameBridge = AgoraAudioFrameBridge(
+                    rtcEngine = engine,
+                    onLocalFrame = { samples, rate ->
+                        dualStreamManager?.pushLocal(samples, rate)
+                    },
+                    onRemoteFrame = { remoteUid, samples, rate ->
+                        dualStreamManager?.pushRemote(samples, rate)
+                    }
+                ).also { it.register() }
+
+                try {
+                    val tokens = fetchRteTokens(channelName, uid)
+                    activeRtcToken = tokens.optString("rtcToken", "")
+                    activeRtmToken = tokens.optString("rtmToken", "")
+                    Log.d("AgoraDebug", "Token has RTM privileges: $activeRtmToken")
+                } catch (e: Exception) {
+                    Log.w("GuardianAgora", "Token server fetch failed, proceeding with tokenless channel: ${e.message}")
+                }
+
+                // 1. Join RTC channel for voice audio transmission
+                engine.setClientRole(Constants.CLIENT_ROLE_BROADCASTER)
+                val joinResult = engine.joinChannel(activeRtcToken.ifBlank { null }, channelName, null, uid)
+                if (joinResult != Constants.ERR_OK) {
+                    Log.w("GuardianAgora", "joinChannel with token returned: $joinResult")
+                }
+
+                // 2. Initialize RTM & Official ConversationalAIAPIImpl Toolkit if token available
+                if (activeRtmToken.isNotBlank()) {
+                    initializeConvoAi(
+                        userId = uid.toString(),
+                        rtmToken = activeRtmToken,
+                        channelName = channelName,
+                        engine = engine
+                    )
+                }
 
             } catch (e: Exception) {
                 Log.e("GuardianAgora", "Start call exception: ${e.message}")
-                // Fallback to local tokenless channel join if running without backend IP
-                rtcEngine?.joinChannel(null, channelName, null, uid)
             }
         }
     }
@@ -188,17 +223,14 @@ class AgoraEngine(
         }
 
         try {
-            // 1. Initialize RTM Client
             val rtmConfig = RtmConfig.Builder(appId, userId).build()
             val client = RtmClient.create(rtmConfig)
             rtmClient = client
 
-            // 2. Login with RTM token (must succeed before subscribing)
             client.login(rtmToken, object : ResultCallback<Void> {
                 override fun onSuccess(response: Void?) {
                     Log.d("Guardian", "RTM login success")
 
-                    // 3. Initialize Official ConversationalAIAPIImpl Toolkit
                     val convoConfig = ConversationalAIAPIConfig(
                         rtcEngine = engine,
                         rtmClient = client,
@@ -209,10 +241,9 @@ class AgoraEngine(
                     val api = ConversationalAIAPIImpl(convoConfig)
                     convoAiApi = api
 
-                    // 4. Register Transcript Handler
                     api.addHandler(object : IConversationalAIAPIEventHandler {
                         override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
-                            Log.d("Guardian", "Transcript: ${transcript.text}")
+                            Log.d("Guardian", "Agora STT Transcript: ${transcript.text}")
                             listener?.onTranscriptReceived(
                                 transcript.text,
                                 transcript.isFinal,
@@ -221,13 +252,11 @@ class AgoraEngine(
                         }
                     })
 
-                    // 5. Subscribe to Channel (MUST be before starting the Agent)
                     api.subscribeMessage(channelName) { error ->
                         if (error != null) {
                             Log.e("Guardian", "RTM subscription failed: ${error.message}")
                         } else {
                             Log.d("Guardian", "RTM subscription confirmed")
-                            // 6. Only after subscription succeeds, start the STT Agent
                             scope.launch {
                                 startSttTask(channelName, localUid)
                             }
@@ -246,6 +275,12 @@ class AgoraEngine(
 
     fun leaveCall() {
         try {
+            frameBridge?.unregister()
+            frameBridge = null
+
+            dualStreamManager?.stop()
+            dualStreamManager = null
+
             agentId?.let { id ->
                 scope.launch { stopSttTask(id) }
             }

@@ -30,6 +30,18 @@ android {
 
         val agoraAppId = localProperties.getProperty("AGORA_APP_ID") ?: ""
         buildConfigField("String", "AGORA_APP_ID", "\"$agoraAppId\"")
+
+        val bhashiniInferenceKey = localProperties.getProperty("BHASHINI_INFERENCE_API_KEY") ?: ""
+        buildConfigField("String", "BHASHINI_INFERENCE_API_KEY", "\"$bhashiniInferenceKey\"")
+
+        val bhashiniPipelineId = localProperties.getProperty("BHASHINI_PIPELINE_ID") ?: ""
+        buildConfigField("String", "BHASHINI_PIPELINE_ID", "\"$bhashiniPipelineId\"")
+
+        val bhashiniSttEndpoint = localProperties.getProperty("BHASHINI_STT_ENDPOINT") ?: ""
+        buildConfigField("String", "BHASHINI_STT_ENDPOINT", "\"$bhashiniSttEndpoint\"")
+
+        val bhashiniRestEndpoint = localProperties.getProperty("BHASHINI_REST_ENDPOINT") ?: ""
+        buildConfigField("String", "BHASHINI_REST_ENDPOINT", "\"$bhashiniRestEndpoint\"")
     }
 
     compileOptions {
@@ -75,6 +87,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     
+    // OkHttp for Bhashini STT WebSocket and REST
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
     // Agora Voice & Audio RTC SDK
     implementation("io.agora.rtc:voice-sdk:4.4.1")
     // Agora RTM (Signaling) SDK for Real-Time Transcripts

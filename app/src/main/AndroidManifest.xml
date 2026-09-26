@@ -10,7 +10,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
@@ -30,16 +32,21 @@
         </activity>
         <activity
             android:name=".CallRiskActivity"
-            android:exported="false" />
+            android:exported="true" />
         <activity
             android:name=".QrScannerActivity"
             android:exported="false" />
+        <activity
+            android:name=".ScamWarningActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Transparent" />
         <activity
             android:name=".LinkCheckActivity"
             android:exported="true"
             android:theme="@style/Theme.Transparent"
             android:noHistory="true"
-            android:excludeFromRecents="true">
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -59,8 +66,8 @@
 
         <service
             android:name=".CallProtectionService"
-            android:foregroundServiceType="phoneCall"
-            android:exported="false" />
+            android:foregroundServiceType="microphone"
+            android:exported="true" />
 
         <service
             android:name=".CallMonitorService"

@@ -12,6 +12,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
 internal object GuardianNotifications {
@@ -122,12 +123,54 @@ class MessageListenerService : NotificationListenerService() {
         val title = extras.getCharSequence("android.title")?.toString().orEmpty()
         val text = extras.getCharSequence("android.text")?.toString().orEmpty()
         val message = "$title $text".trim()
+
         if (SuspiciousMessageDetector.isSuspicious(message)) {
-            GuardianNotifications.warn(
-                this,
-                "Message needs a second look",
-                "This notification contains language commonly used in urgent scams. Do not share an OTP, PIN, or payment."
-            )
+            Log.w("GuardianSMS", "Suspicious message notification intercepted from ${statusBarNotification.packageName}: '$message'")
+            try {
+                // Cancel original message notification
+                val notificationKey = statusBarNotification.key
+                cancelNotification(notificationKey)
+
+                val originalIntent = statusBarNotification.notification.contentIntent
+                val guardianIntent = Intent(this, ScamWarningActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra("source", statusBarNotification.packageName)
+                    putExtra("title", title.ifBlank { "Suspicious SMS / Notification" })
+                    putExtra("body", text.ifBlank { message })
+                    putExtra("score", 85)
+                    putExtra("explanation", "Guardian detected suspicious urgent keywords or masked link verification requests in this notification.")
+                    putExtra("original_pending_intent", originalIntent)
+                }
+
+                val builder = NotificationCompat.Builder(this, "guardian_protection")
+                    .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                    .setContentTitle("⚠️ Guardian: Suspicious message detected")
+                    .setContentText(message.take(80))
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setAutoCancel(true)
+                    .setContentIntent(
+                        PendingIntent.getActivity(
+                            this,
+                            (0..10000).random(),
+                            guardianIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+                    )
+
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.notify(
+                    statusBarNotification.id + 100000,
+                    builder.build()
+                )
+            } catch (e: Exception) {
+                Log.e("GuardianSMS", "Failed to intercept SMS notification: ${e.message}", e)
+                GuardianNotifications.warn(
+                    this,
+                    "Suspicious SMS intercepted",
+                    "Notification contained urgent scam indicators: $message"
+                )
+            }
         }
     }
 }

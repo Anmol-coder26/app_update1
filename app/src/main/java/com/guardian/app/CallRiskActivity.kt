@@ -5,11 +5,19 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +36,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -55,6 +64,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -64,14 +74,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import com.guardian.app.bhashini.Speaker
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+data class LabeledTranscript(
+    val speaker: Speaker,
+    val text: String,
+    val isFinal: Boolean,
+    val timestamp: Long = System.currentTimeMillis()
+)
 
 class CallRiskActivity : ComponentActivity() {
     private val microphonePermissionLauncher =
@@ -89,7 +109,7 @@ class CallRiskActivity : ComponentActivity() {
     private var errorMessage by mutableStateOf<String?>(null)
     private var selectedLanguage by mutableStateOf(LanguageMode.AUTO)
     private var audioLevel by mutableFloatStateOf(0f)
-    private val conversationHistory = mutableStateListOf<String>()
+    private val labeledTranscripts = mutableStateListOf<LabeledTranscript>()
     private val transcriptBuffer = StringBuilder()
 
     private var transcriber: StreamingTranscriber? = null
@@ -98,8 +118,12 @@ class CallRiskActivity : ComponentActivity() {
     private var analysisJob: Job? = null
     private var isDemoModePlaying by mutableStateOf(false)
     private var demoJob: Job? = null
+    private var scoreWatcherJob: Job? = null
     private var warningPlayer: com.guardian.app.callprotect.CriticalWarningPlayer? = null
     private var currentCallerNumber by mutableStateOf("")
+
+    private var lastScoreChangeTime = System.currentTimeMillis()
+    private var lastScoreValue = 0
 
     @Suppress("DEPRECATION")
     private val callEndListener = object : PhoneStateListener() {
@@ -160,6 +184,9 @@ class CallRiskActivity : ComponentActivity() {
             telephony.listen(callEndListener, PhoneStateListener.LISTEN_CALL_STATE)
         }
 
+        // Auto-start speakerphone transcription pipeline for live protection
+        requestAndStartDetection()
+
         setContent {
             val agoraCallState by agoraEngine?.callState?.collectAsState() ?: remember { mutableStateOf(AgoraCallState.DISCONNECTED) }
 
@@ -170,7 +197,7 @@ class CallRiskActivity : ComponentActivity() {
                     isAgoraMode = isAgoraMode,
                     agoraCallState = agoraCallState,
                     transcript = transcript,
-                    conversationHistory = conversationHistory,
+                    labeledTranscripts = labeledTranscripts,
                     riskReport = riskReport,
                     errorMessage = errorMessage,
                     selectedLanguage = selectedLanguage,
@@ -180,6 +207,11 @@ class CallRiskActivity : ComponentActivity() {
                     onLanguageSelect = { lang ->
                         selectedLanguage = lang
                         transcriber?.setLanguage(lang)
+                        agoraEngine?.setLanguage(when(lang) {
+                            LanguageMode.HINDI -> "hi"
+                            LanguageMode.ENGLISH -> "en"
+                            LanguageMode.AUTO -> "hi"
+                        })
                     },
                     onStartSpeaker = ::requestAndStartDetection,
                     onStartAgoraVoip = ::startAgoraCall,
@@ -222,33 +254,32 @@ class CallRiskActivity : ComponentActivity() {
 
         val scenarioTurns = when (scenarioIndex) {
             1 -> listOf(
-                "Good afternoon, this is SBI Card Fraud Prevention unit calling.",
-                "An unauthorized overseas debit of ₹45,000 was initiated from Dubai.",
-                "To freeze your card and cancel the transfer, please verify the 6-digit OTP code sent to your phone."
+                Pair(Speaker.REMOTE, "Good afternoon, this is SBI Card Fraud Prevention unit calling."),
+                Pair(Speaker.LOCAL, "Yes, what is this regarding?"),
+                Pair(Speaker.REMOTE, "An unauthorized overseas debit of ₹45,000 was initiated from Dubai."),
+                Pair(Speaker.LOCAL, "I did not make this transaction!"),
+                Pair(Speaker.REMOTE, "To freeze your card and cancel the transfer, please verify the 6-digit OTP code sent to your phone.")
             )
             2 -> listOf(
-                "Urgent notification: State Electricity Board power management team.",
-                "Your residential power supply meter is scheduled for disconnection in 20 minutes due to unpaid dues.",
-                "Download the AnyDesk remote screen application and pay ₹2,500 security deposit immediately."
+                Pair(Speaker.REMOTE, "Urgent notification: State Electricity Board power management team."),
+                Pair(Speaker.LOCAL, "Hello?"),
+                Pair(Speaker.REMOTE, "Your residential power supply meter is scheduled for disconnection in 20 minutes due to unpaid dues."),
+                Pair(Speaker.REMOTE, "Download the AnyDesk remote screen application and pay ₹2,500 security deposit immediately.")
             )
             else -> listOf(
-                "I am Inspector Rajesh Kumar from Delhi Cyber Crime Cell HQ.",
-                "A seized DHL narcotics parcel with 12 fake passports was found registered under your Aadhaar number.",
-                "You are under immediate digital arrest. Transfer ₹50,000 verification bail money immediately to avoid police custody."
+                Pair(Speaker.REMOTE, "I am Inspector Rajesh Kumar from Delhi Cyber Crime Cell HQ."),
+                Pair(Speaker.LOCAL, "Who is this?"),
+                Pair(Speaker.REMOTE, "A seized DHL narcotics parcel with 12 fake passports was found registered under your Aadhaar number."),
+                Pair(Speaker.LOCAL, "I know nothing about any parcel!"),
+                Pair(Speaker.REMOTE, "You are under immediate digital arrest. Transfer ₹50,000 verification bail money immediately to avoid police custody.")
             )
         }
 
         demoJob = lifecycleScope.launch {
-            for (turn in scenarioTurns) {
+            for ((speaker, turn) in scenarioTurns) {
                 if (!isDemoModePlaying) break
-                transcript = turn
-                conversationHistory.add(0, turn)
-                transcriptBuffer.append(" ").append(turn)
-                isAnalyzing = true
-                riskReport = semanticAnalyzer.analyzeChunk(transcriptBuffer.toString())
-                isAnalyzing = false
-                checkCallWarning(riskReport)
-                kotlinx.coroutines.delay(2500)
+                handleIncomingTranscript(turn, isFinal = true, speaker = speaker)
+                delay(2500)
             }
             isDemoModePlaying = false
         }
@@ -271,11 +302,18 @@ class CallRiskActivity : ComponentActivity() {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         } else {
             startDetection()
+            val langCode = when (selectedLanguage) {
+                LanguageMode.HINDI -> "hi"
+                LanguageMode.ENGLISH -> "en"
+                LanguageMode.AUTO -> "hi"
+            }
             agoraEngine?.startCall(
                 channelName = "guardian_secure_call",
+                language = langCode,
                 listener = object : AgoraTranscriptListener {
                     override fun onTranscriptReceived(text: String, isFinal: Boolean, speakerUid: Int) {
-                        handleIncomingTranscript(text, isFinal)
+                        val speaker = if (speakerUid > 0) Speaker.LOCAL else Speaker.REMOTE
+                        handleIncomingTranscript(text, isFinal, speaker)
                     }
 
                     override fun onCallStateChanged(state: AgoraCallState, message: String) {
@@ -295,16 +333,28 @@ class CallRiskActivity : ComponentActivity() {
     private fun startDetection() {
         stopDetection()
         transcript = ""
+        labeledTranscripts.clear()
         transcriptBuffer.clear()
-        conversationHistory.clear()
         riskReport = RiskReport()
         errorMessage = null
         isDetecting = true
+        lastScoreChangeTime = System.currentTimeMillis()
+        lastScoreValue = 0
+
+        // Start score staleness monitor
+        scoreWatcherJob = lifecycleScope.launch {
+            while (isDetecting) {
+                delay(3000)
+                if (isDetecting && System.currentTimeMillis() - lastScoreChangeTime > 5000 && labeledTranscripts.isNotEmpty()) {
+                    Log.w("Guardian", "WARN: risk score has not changed — check transcript pipeline")
+                }
+            }
+        }
 
         transcriber = AndroidSpeechTranscriber(this).also { speech ->
             speech.start(selectedLanguage, object : TranscriptListener {
                 override fun onTranscript(text: String, isFinal: Boolean) {
-                    handleIncomingTranscript(text, isFinal)
+                    handleIncomingTranscript(text, isFinal, Speaker.REMOTE)
                 }
 
                 override fun onRmsChanged(rmsdB: Float) {
@@ -322,36 +372,56 @@ class CallRiskActivity : ComponentActivity() {
         }
     }
 
-    private fun handleIncomingTranscript(text: String, isFinal: Boolean) {
+    private fun handleIncomingTranscript(text: String, isFinal: Boolean, speaker: Speaker = Speaker.REMOTE) {
         transcript = text
-        if (isFinal && text.isNotBlank()) {
-            conversationHistory.add(0, text)
-            transcriptBuffer.append(" ").append(text)
-            if (transcriptBuffer.length > 800) {
-                transcriptBuffer.delete(0, transcriptBuffer.length - 800)
+        Log.i("Guardian", "Transcript received ($speaker): '$text' (isFinal=$isFinal)")
+
+        if (text.isNotBlank()) {
+            if (isFinal) {
+                labeledTranscripts.add(LabeledTranscript(speaker, text, true))
+            } else {
+                // Update or add interim line
+                val lastIdx = labeledTranscripts.indexOfLast { it.speaker == speaker && !it.isFinal }
+                if (lastIdx >= 0) {
+                    labeledTranscripts[lastIdx] = LabeledTranscript(speaker, text, false)
+                } else {
+                    labeledTranscripts.add(LabeledTranscript(speaker, text, false))
+                }
             }
         }
 
-        val fullContext = if (transcriptBuffer.isNotEmpty()) {
-            "$transcriptBuffer $text".trim()
-        } else {
-            text
+        // Build labeled transcript prompt
+        val fullLabeledContext = labeledTranscripts.joinToString("\n") { line ->
+            val prefix = when (line.speaker) {
+                Speaker.LOCAL -> "You: "
+                Speaker.REMOTE -> "Caller: "
+                Speaker.UNKNOWN -> ""
+            }
+            "$prefix${line.text}"
         }
 
         analysisJob?.cancel()
         analysisJob = lifecycleScope.launch {
             isAnalyzing = true
-            riskReport = semanticAnalyzer.analyzeChunk(fullContext)
+            val raw = semanticAnalyzer.analyzeChunk(fullLabeledContext)
+            riskReport = raw
+
+            if (raw.riskScore != lastScoreValue) {
+                lastScoreValue = raw.riskScore
+                lastScoreChangeTime = System.currentTimeMillis()
+                Log.i("Guardian", "Risk score updated: ${raw.riskScore} (level=${raw.status.label}) signals=${raw.topSignals.map { it.title }}")
+            }
+
             isAnalyzing = false
             checkCallWarning(riskReport)
         }
     }
 
     private fun stopDetection() {
-        if (isDetecting || conversationHistory.isNotEmpty()) {
+        if (isDetecting || labeledTranscripts.isNotEmpty()) {
             val finalScore = riskReport.riskScore
             val signals = riskReport.topSignals.joinToString(", ")
-            val summary = transcriptBuffer.toString().trim().take(300)
+            val summary = labeledTranscripts.takeLast(5).joinToString("; ") { "${it.speaker}: ${it.text}" }.take(300)
             val num = currentCallerNumber.ifBlank { "Live Speaker Audio" }
             lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 val repo = com.guardian.app.callprotect.NumberReputationRepository(applicationContext)
@@ -373,6 +443,8 @@ class CallRiskActivity : ComponentActivity() {
         agoraEngine?.leaveCall()
         analysisJob?.cancel()
         analysisJob = null
+        scoreWatcherJob?.cancel()
+        scoreWatcherJob = null
         isDetecting = false
         isAnalyzing = false
         isAgoraMode = false
@@ -382,23 +454,17 @@ class CallRiskActivity : ComponentActivity() {
     private fun resetDemo() {
         stopDetection()
         transcript = ""
+        labeledTranscripts.clear()
         transcriptBuffer.clear()
-        conversationHistory.clear()
         riskReport = RiskReport()
         errorMessage = null
         semanticAnalyzer.reset()
+        lastScoreChangeTime = System.currentTimeMillis()
+        lastScoreValue = 0
     }
 
     private fun simulateScenario(sampleText: String) {
-        transcript = sampleText
-        conversationHistory.add(0, sampleText)
-        transcriptBuffer.append(" ").append(sampleText)
-        lifecycleScope.launch {
-            isAnalyzing = true
-            riskReport = semanticAnalyzer.analyzeChunk(transcriptBuffer.toString())
-            isAnalyzing = false
-            checkCallWarning(riskReport)
-        }
+        handleIncomingTranscript(sampleText, isFinal = true, speaker = Speaker.REMOTE)
     }
 
     override fun onDestroy() {
@@ -413,30 +479,31 @@ class CallRiskActivity : ComponentActivity() {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CallRiskScreen(
+fun CallRiskScreen(
     isDetecting: Boolean,
     isAnalyzing: Boolean,
     isAgoraMode: Boolean,
     agoraCallState: AgoraCallState,
     transcript: String,
-    conversationHistory: List<String>,
+    labeledTranscripts: List<LabeledTranscript>,
     riskReport: RiskReport,
     errorMessage: String?,
     selectedLanguage: LanguageMode,
     audioLevel: Float,
-    isDemoModePlaying: Boolean = false,
-    callerNumber: String = "",
+    isDemoModePlaying: Boolean,
+    callerNumber: String,
     onLanguageSelect: (LanguageMode) -> Unit,
     onStartSpeaker: () -> Unit,
     onStartAgoraVoip: () -> Unit,
     onStop: () -> Unit,
     onReset: () -> Unit,
-    onEndCall: () -> Unit = {},
-    onBlockNumber: () -> Unit = {},
+    onEndCall: () -> Unit,
+    onBlockNumber: () -> Unit,
     onSimulateScenario: (String) -> Unit,
-    onPlayFullDemo: (Int) -> Unit = {}
+    onPlayFullDemo: (Int) -> Unit
 ) {
-    val riskColor by animateColorAsState(
+    val score = riskReport.riskScore
+    val animatedRiskScore by animateColorAsState(
         targetValue = when (riskReport.status) {
             RiskStatus.Low -> CyberEmerald
             RiskStatus.Suspicious -> AmberWarning
@@ -445,147 +512,264 @@ private fun CallRiskScreen(
         label = "callRiskColor"
     )
 
+    val infiniteTransition = rememberInfiniteTransition(label = "analyzingPulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    val listState = rememberLazyListState()
+    LaunchedEffect(labeledTranscripts.size) {
+        if (labeledTranscripts.isNotEmpty()) {
+            listState.animateScrollToItem(labeledTranscripts.size - 1)
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground),
-        contentPadding = PaddingValues(18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .background(DarkBackground)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        state = listState
     ) {
-        // Top Header with Agora Badge
+        // Header Bar
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    color = CyberEmeraldGlow,
-                    shape = CircleShape,
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                            contentDescription = null,
-                            tint = CyberEmerald,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Call Scam Intelligence", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(if (isDetecting) CyberEmerald else TextMuted)
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        if (isAgoraMode) "Agora RTC Voice Stream active" else "Real-time Dual-Engine AI analysis",
-                        color = TextSecondary,
-                        fontSize = 12.sp
+                        text = if (isDetecting) {
+                            if (isAgoraMode) "DUAL-STREAM VOIP DEFENSE" else "SPEAKERPHONE CALL SHIELD"
+                        } else "DEFENSE STANDBY",
+                        color = if (isDetecting) CyberEmerald else TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
                     )
                 }
 
-                Surface(
-                    color = DarkSurfaceVariant,
-                    shape = RoundedCornerShape(6.dp)
+                if (isAnalyzing) {
+                    Surface(
+                        color = ElectricIndigo.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.alpha(pulseAlpha)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Psychology, contentDescription = null, tint = ElectricIndigo, modifier = Modifier.size(12.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Analyzing Live...", color = ElectricIndigo, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Circular Live Risk Gauge
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(170.dp)
+                        .border(
+                            width = 10.dp,
+                            color = animatedRiskScore.copy(alpha = 0.25f),
+                            shape = CircleShape
+                        )
+                        .border(
+                            width = 3.dp,
+                            color = animatedRiskScore,
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        "⚡ Powered by Agora",
-                        color = ElectricIndigo,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "$score%",
+                            fontSize = 42.sp,
+                            fontWeight = FontWeight.Black,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = riskReport.status.label,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = animatedRiskScore,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // 4 Engine Breakdown Grid
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    EngineCard(
+                        title = "Pretext Legitimacy",
+                        icon = Icons.Default.Security,
+                        detected = riskReport.engines.pretextLegitimacy.detected,
+                        detail = riskReport.engines.pretextLegitimacy.summary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    EngineCard(
+                        title = "Intent Extraction",
+                        icon = Icons.Default.WarningAmber,
+                        detected = riskReport.engines.intentRisk.detected,
+                        detail = riskReport.engines.intentRisk.summary,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    EngineCard(
+                        title = "Psychological Pressure",
+                        icon = Icons.Default.GraphicEq,
+                        detected = riskReport.engines.psychologicalPressure.detected,
+                        detail = riskReport.engines.psychologicalPressure.summary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    EngineCard(
+                        title = "Pattern Detection",
+                        icon = Icons.Default.Psychology,
+                        detected = riskReport.engines.zeroShotVariant.detected,
+                        detail = riskReport.engines.zeroShotVariant.explanation.ifBlank { riskReport.engines.zeroShotVariant.variantName },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
         }
 
-        // Language Mode Filter Chips
+        // Plain Language Reasoning Explanation
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
             ) {
-                Row(
+                Column(Modifier.padding(14.dp)) {
+                    Text(
+                        "Why this score?",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = if (selectedLanguage == LanguageMode.HINDI) riskReport.explanationHi else riskReport.explanationEn,
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    if (riskReport.highlightedPhrases.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Flagged Trigger Keywords:", fontSize = 11.sp, color = TextMuted)
+                        FlowRow(
+                            modifier = Modifier.padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            riskReport.highlightedPhrases.forEach { phrase ->
+                                Surface(
+                                    color = CoralRed.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = androidx.compose.foundation.BorderStroke(0.5.dp, CoralRed)
+                                ) {
+                                    Text(
+                                        "⚠ $phrase",
+                                        color = CoralRed,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Action Controls (End Call, Block)
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onEndCall,
+                    colors = ButtonDefaults.buttonColors(containerColor = CoralRed, contentColor = Color.White),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Language:", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    LanguageMode.values().forEach { lang ->
-                        FilterChip(
-                            selected = selectedLanguage == lang,
-                            onClick = { onLanguageSelect(lang) },
-                            label = { Text(lang.label, fontSize = 11.sp) },
-                            leadingIcon = if (selectedLanguage == lang) {
-                                { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                            } else null
-                        )
-                    }
+                    Icon(Icons.Default.CallEnd, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("END CALL IMMEDIATELY", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+                }
+
+                OutlinedButton(
+                    onClick = onBlockNumber,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Security, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Block & Add to Reputation DB", fontSize = 12.sp, color = TextSecondary)
                 }
             }
         }
 
-        // AI REASONING CARD (Core Deliverable Component)
-        item {
-            AIReasoningCard(
-                report = riskReport,
-                rawTranscript = transcript,
-                isAnalyzing = isAnalyzing,
-                onReset = onReset,
-                onEndCall = onEndCall,
-                onBlockNumber = onBlockNumber,
-                callerNumber = callerNumber
-            )
-        }
-
-        // High Risk Urgent Banner
-        if (riskReport.status == RiskStatus.High) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF450A0A)),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, CoralRed)
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.WarningAmber,
-                                contentDescription = null,
-                                tint = CoralRed,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "CRITICAL FRAUD THREAT DETECTED",
-                                fontWeight = FontWeight.Bold,
-                                color = CoralRed,
-                                fontSize = 14.sp
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "• HANG UP THE CALL IMMEDIATELY.\n• Do NOT share OTP, PIN, or banking passwords.\n• Police / CBI / Banks NEVER demand money or digital arrest over phone calls.\n• Do NOT install AnyDesk or screen sharing apps.",
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp,
-                            color = Color(0xFFFECACA)
-                        )
-                    }
-                }
-            }
-        }
-
-        // Action Buttons (Agora VoIP & Speakerphone AI)
+        // Audio Source Selection & Controls
         item {
             if (isDetecting) {
                 Button(
                     onClick = onStop,
-                    colors = ButtonDefaults.buttonColors(containerColor = CoralRed),
+                    colors = ButtonDefaults.buttonColors(containerColor = CoralRed.copy(alpha = 0.85f), contentColor = Color.White),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .height(48.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(Icons.Default.CallEnd, contentDescription = null)
+                    Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(if (isAgoraMode) "End Agora VoIP Call" else "Stop Live Listening", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text("Stop Live Listening", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
             } else {
                 Row(
@@ -602,7 +786,7 @@ private fun CallRiskScreen(
                     ) {
                         Icon(Icons.Default.HeadsetMic, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Start Agora VoIP Call", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("Agora VoIP", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Button(
@@ -615,71 +799,95 @@ private fun CallRiskScreen(
                     ) {
                         Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Speakerphone AI", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("Speakerphone", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
 
-        // Live Audio Stream Status
-        if (isDetecting) {
-            item {
-                Surface(
-                    color = DarkSurface,
-                    shape = RoundedCornerShape(10.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.3f))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(Icons.Default.GraphicEq, contentDescription = null, tint = CyberEmerald, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            if (isAgoraMode) "Agora RTC Audio streaming... (${(audioLevel * 100).toInt()}% mic volume)"
-                            else "Live acoustic stream listening... (${(audioLevel * 100).toInt()}% mic activity)",
-                            color = CyberEmerald,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-        }
-
-        // Raw Transcript Feed Card
+        // Dual-Stream Live Transcript UI (Part 1.7)
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(14.dp)) {
-                    Text("Live Utterance Stream", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPrimary)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        if (transcript.isNotBlank()) "\"$transcript\""
-                        else "Awaiting caller speech...",
-                        fontWeight = if (transcript.isNotBlank()) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (transcript.isNotBlank()) CyberEmerald else TextSecondary,
-                        fontSize = 13.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("LIVE DUAL-STREAM TRANSCRIPT", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = TextMuted, letterSpacing = 1.sp)
+                        if (isDetecting) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.GraphicEq, contentDescription = null, tint = CyberEmerald, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Live Audio", color = CyberEmerald, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
 
-                    if (conversationHistory.isNotEmpty()) {
-                        Spacer(Modifier.height(10.dp))
-                        Text("Conversation Dialogue Log:", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = TextMuted)
-                        conversationHistory.take(4).forEach { phrase ->
-                            Text("• $phrase", fontSize = 11.sp, color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
+                    Spacer(Modifier.height(10.dp))
+
+                    if (labeledTranscripts.isEmpty()) {
+                        Surface(
+                            color = DarkSurfaceElevated,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (transcript.isNotBlank()) "\"$transcript\"" else "Awaiting live acoustic or dual-stream speech...",
+                                color = if (transcript.isNotBlank()) CyberEmerald else TextMuted,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            labeledTranscripts.takeLast(8).forEach { line ->
+                                val isLocal = line.speaker == Speaker.LOCAL
+                                val alignment = if (isLocal) Alignment.Start else Alignment.End
+                                val bubbleBg = if (isLocal) ElectricIndigo.copy(alpha = 0.25f) else DarkSurfaceElevated
+                                val borderCol = if (isLocal) ElectricIndigo.copy(alpha = 0.6f) else BorderSubtle
+                                val textColor = if (line.isFinal) TextPrimary else TextSecondary
+                                val speakerLabel = if (isLocal) "You" else "Caller"
+
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalAlignment = alignment
+                                ) {
+                                    Text(
+                                        speakerLabel,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isLocal) ElectricIndigo else AmberWarning,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                    Surface(
+                                        color = bubbleBg,
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, borderCol),
+                                        modifier = Modifier.fillMaxWidth(0.85f)
+                                    ) {
+                                        Text(
+                                            text = line.text,
+                                            color = textColor,
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp,
+                                            modifier = Modifier.padding(8.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Instant Hackathon Demo Simulator
+        // Instant Stage Demo Simulator
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = DarkSurfaceElevated),
@@ -691,14 +899,15 @@ private fun CallRiskScreen(
                         Icon(Icons.Default.PlayArrow, contentDescription = null, tint = ElectricIndigo, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            if (isDemoModePlaying) "🔴 Live Stage Demo Playing (Auto Dialogue)..." else "Instant Stage Demo Triggers",
+                            if (isDemoModePlaying) "🔴 Live Stage Demo Playing (Auto Dialogue)..." else "STAGE DEMO SCENARIOS",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = if (isDemoModePlaying) CoralRed else TextPrimary
+                            fontSize = 12.sp,
+                            color = if (isDemoModePlaying) CoralRed else TextPrimary,
+                            letterSpacing = 0.5.sp
                         )
                     }
                     Text(
-                        "Run full multi-turn simulated scam dialogues to demonstrate evolving AI risk score on stage:",
+                        "Simulate multi-turn dual-stream fraud dialogues to demonstrate real-time AI score escalation:",
                         fontSize = 11.sp,
                         color = TextSecondary,
                         modifier = Modifier.padding(vertical = 4.dp)
@@ -735,11 +944,62 @@ private fun CallRiskScreen(
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("⚡ Electricity Cut", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("⚡ Power Cut", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun EngineCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    detected: Boolean,
+    detail: String,
+    modifier: Modifier = Modifier
+) {
+    val statusColor = if (detected) CoralRed else CyberEmerald
+    val containerColor = if (detected) Color(0xFF280B0B) else DarkSurface
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (detected) CoralRed.copy(alpha = 0.5f) else BorderSubtle),
+        modifier = modifier
+    ) {
+        Column(Modifier.padding(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(icon, contentDescription = null, tint = statusColor, modifier = Modifier.size(16.dp))
+                Surface(
+                    color = statusColor.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        if (detected) "ALERT" else "SAFE",
+                        color = statusColor,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(title, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(
+                detail,
+                fontSize = 10.sp,
+                color = TextSecondary,
+                maxLines = 2,
+                lineHeight = 12.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
     }
 }
