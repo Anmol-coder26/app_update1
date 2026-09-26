@@ -34,13 +34,14 @@ interface FlaggedNumberDao {
 }
 
 @Database(
-    entities = [FlaggedNumber::class, CallHistoryEntry::class],
-    version = 1,
+    entities = [FlaggedNumber::class, CallHistoryEntry::class, com.guardian.app.protect.advanced.ContactProfile::class],
+    version = 2,
     exportSchema = false
 )
 abstract class GuardianDatabase : RoomDatabase() {
     abstract fun flaggedNumberDao(): FlaggedNumberDao
     abstract fun callHistoryDao(): CallHistoryDao
+    abstract fun contactProfileDao(): com.guardian.app.protect.advanced.ContactProfileDao
 
     companion object {
         @Volatile
@@ -52,7 +53,7 @@ abstract class GuardianDatabase : RoomDatabase() {
                     context.applicationContext,
                     GuardianDatabase::class.java,
                     "guardian_db"
-                ).build()
+                ).fallbackToDestructiveMigration().build()
                 INSTANCE = instance
                 instance
             }

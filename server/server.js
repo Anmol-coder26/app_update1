@@ -172,7 +172,13 @@ app.post('/stt/stop', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// 6. Health Check
+// 6. POST /alerts/trusted-contact - Emergency Contact Alert Dispatch
+// -------------------------------------------------------------
+const trustedAlertsRouter = require('./routes/trusted_alerts');
+app.use('/alerts', trustedAlertsRouter);
+
+// -------------------------------------------------------------
+// 7. Health Check
 // -------------------------------------------------------------
 app.get('/health', (req, res) => {
     res.json({

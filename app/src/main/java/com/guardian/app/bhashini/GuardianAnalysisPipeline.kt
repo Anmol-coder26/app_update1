@@ -13,7 +13,8 @@ import kotlinx.coroutines.launch
 class GuardianAnalysisPipeline(
     private val analyzer: SemanticAnalyzer,
     private val onRiskUpdate: (RiskReport) -> Unit,
-    private val onError: (String) -> Unit = {}
+    private val onError: (String) -> Unit = {},
+    private val onPcmChunk: ((ShortArray) -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "GuardianAnalysisPipe"
@@ -37,7 +38,8 @@ class GuardianAnalysisPipeline(
             onError = { error ->
                 Log.e(TAG, "STT Pipeline error: $error")
                 onError(error)
-            }
+            },
+            onPcmChunk = onPcmChunk
         )
 
         try {

@@ -19,7 +19,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class BhashiniSttClient(
     private val onTranscript: (text: String, isFinal: Boolean) -> Unit,
-    private val onError: (error: String) -> Unit = {}
+    private val onError: (error: String) -> Unit = {},
+    private val onPcmChunk: ((ShortArray) -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "BhashiniSttClient"
@@ -158,6 +159,16 @@ class BhashiniSttClient(
                 if (readBytes > 0) {
                     val byteString = audioBuffer.toByteString(0, readBytes)
                     ws.send(byteString)
+
+                    if (onPcmChunk != null && readBytes >= 2) {
+                        val shortCount = readBytes / 2
+                        val shortArr = ShortArray(shortCount)
+                        java.nio.ByteBuffer.wrap(audioBuffer, 0, readBytes)
+                            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                            .asShortBuffer()
+                            .get(shortArr)
+                        onPcmChunk.invoke(shortArr)
+                    }
                 }
             }
         }, "BhashiniAudioStream").apply {

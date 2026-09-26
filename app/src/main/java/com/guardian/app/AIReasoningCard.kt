@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Timer
@@ -64,11 +65,13 @@ import com.guardian.app.ui.theme.GxPrimarySoft
 import com.guardian.app.ui.theme.GxSafe
 import com.guardian.app.ui.theme.GxShapeLg
 import com.guardian.app.ui.theme.GxShapeMd
+import com.guardian.app.ui.theme.GxShapePill
 import com.guardian.app.ui.theme.GxSurface
 import com.guardian.app.ui.theme.GxSurfaceAlt
 import com.guardian.app.ui.theme.GxTextHi
 import com.guardian.app.ui.theme.GxTextLo
 import com.guardian.app.ui.theme.GxTextMid
+import com.guardian.app.ui.theme.GxType
 import com.guardian.app.ui.theme.GxVoid
 import com.guardian.app.ui.theme.GxWarning
 import com.guardian.app.ui.theme.GxWarningSoft
@@ -263,6 +266,45 @@ fun AIReasoningCard(
             }
 
             // ----------------------------------------------------
+            // 3.5 Identity Consistency Mismatch Alert (if detected)
+            // ----------------------------------------------------
+            if (report.identityMismatch.detected) {
+                Surface(
+                    color = GxDangerSoft,
+                    shape = GxShapeMd,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, GxDanger.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = GxDanger,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Identity Mismatch Detected",
+                                color = GxDanger,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = report.identityMismatch.reasons.joinToString(", ").ifBlank { "Behavior deviates from contact baseline" },
+                                color = GxTextMid,
+                                fontSize = 11.sp
+                            )
+                        }
+                        GxChip(text = "ANOMALY", variant = GxChipVariant.Danger, height = 22.dp)
+                    }
+                }
+            }
+
+            // ----------------------------------------------------
             // 4. Tactical Reasoning Block
             // ----------------------------------------------------
             Surface(
@@ -310,6 +352,82 @@ fun AIReasoningCard(
                         lineHeight = 19.sp,
                         maxLines = if (isExpanded) Int.MAX_VALUE else 3
                     )
+                }
+            }
+
+            // ----------------------------------------------------
+            // 4.5 Plain-Language Explanation ("Why this score?")
+            // ----------------------------------------------------
+            Surface(
+                color = GxSurfaceAlt,
+                shape = GxShapeMd,
+                border = androidx.compose.foundation.BorderStroke(1.dp, GxBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Why this score?",
+                        style = GxType.label,
+                        color = GxTextMid
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = if (showHindiExplanation) com.guardian.app.protect.advanced.PlainReasoningEngine.explainInHindi(report)
+                        else com.guardian.app.protect.advanced.PlainReasoningEngine.explain(report),
+                        style = GxType.body,
+                        color = GxTextHi,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            // ----------------------------------------------------
+            // 4.8 Voice Naturalness / Synthesis Detector
+            // ----------------------------------------------------
+            if (report.syntheticConfidence > 0f) {
+                Surface(
+                    color = GxSurfaceAlt,
+                    shape = GxShapeMd,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, GxBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "Voice Naturalness Analysis",
+                                style = GxType.label,
+                                color = GxTextMid
+                            )
+                            val (synthLabel, synthVariant) = when {
+                                report.syntheticConfidence >= 0.70f -> "Synthetic AI Voice" to GxChipVariant.Danger
+                                report.syntheticConfidence >= 0.40f -> "Uncertain" to GxChipVariant.Warning
+                                else -> "Human Organic" to GxChipVariant.Safe
+                            }
+                            GxChip(text = synthLabel, variant = synthVariant, height = 20.dp)
+                        }
+
+                        // Progress track
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { report.syntheticConfidence.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(GxShapePill),
+                            color = when {
+                                report.syntheticConfidence >= 0.70f -> GxDanger
+                                report.syntheticConfidence >= 0.40f -> GxWarning
+                                else -> GxSafe
+                            },
+                            trackColor = GxSurface
+                        )
+
+                        Text(
+                            text = "Heuristic signal — not a guarantee • Confidence: ${(report.syntheticConfidence * 100).toInt()}%",
+                            style = GxType.caption,
+                            color = GxTextLo
+                        )
+                    }
                 }
             }
 

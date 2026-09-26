@@ -110,10 +110,15 @@ import com.guardian.app.ui.theme.GxSurfaceAlt
 import com.guardian.app.ui.theme.GxTextHi
 import com.guardian.app.ui.theme.GxTextLo
 import com.guardian.app.ui.theme.GxTextMid
+import com.guardian.app.ui.theme.GxType
 import com.guardian.app.ui.theme.GxVoid
 import com.guardian.app.ui.theme.GxWarning
 import com.guardian.app.ui.theme.GxWarningSoft
 import com.guardian.app.ui.theme.gxFancyGlow
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ==========================================
 // 1. AUTH SCREEN (Obsidian Security Aesthetic)
@@ -1018,11 +1023,33 @@ fun SettingsScreen(
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val prefs = remember { context.getSharedPreferences("guardian_prefs", Context.MODE_PRIVATE) }
     var currentLang by remember {
-        mutableStateOf(
-            context.getSharedPreferences("guardian_prefs", Context.MODE_PRIVATE)
-                .getString("preferred_language", "hi") ?: "hi"
+        mutableStateOf(prefs.getString("preferred_language", "hi") ?: "hi")
+    }
+    var voiceSynthEnabled by remember {
+        mutableStateOf(prefs.getBoolean("voice_synthesis_enabled", true))
+    }
+    var plainReasoningEnabled by remember {
+        mutableStateOf(prefs.getBoolean("plain_reasoning_enabled", true))
+    }
+
+    var showTrustedContact by remember { mutableStateOf(false) }
+    var showProfiles by remember { mutableStateOf(false) }
+
+    if (showTrustedContact) {
+        com.guardian.app.protect.advanced.TrustedContactSettingsScreen(
+            onBack = { showTrustedContact = false }
         )
+        return
+    }
+
+    if (showProfiles) {
+        com.guardian.app.protect.advanced.ContactProfilesScreen(
+            onBack = { showProfiles = false }
+        )
+        return
     }
 
     LazyColumn(
@@ -1066,6 +1093,82 @@ fun SettingsScreen(
             }
         }
 
+        // Advanced Protection Suite (New)
+        item {
+            GxCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Advanced Protection Suite", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = GxTextHi)
+                        GxChip(text = "PRO 2026", variant = GxChipVariant.Brand)
+                    }
+
+                    SettingToggleRow(
+                        title = "Voice Synthesis Detection",
+                        desc = "Acoustic FFT & pitch variance analysis to detect cloned/AI voices",
+                        enabled = voiceSynthEnabled,
+                        onToggle = {
+                            voiceSynthEnabled = it
+                            prefs.edit().putBoolean("voice_synthesis_enabled", it).apply()
+                        }
+                    )
+
+                    SettingToggleRow(
+                        title = "Plain-Language Reasoning",
+                        desc = "Clear English & Hindi breakdown explaining risk score factors",
+                        enabled = plainReasoningEnabled,
+                        onToggle = {
+                            plainReasoningEnabled = it
+                            prefs.edit().putBoolean("plain_reasoning_enabled", it).apply()
+                        }
+                    )
+
+                    Spacer(Modifier.height(2.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showTrustedContact = true }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Emergency Trusted Contact", color = GxTextHi, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("Auto-alert relative on >=75% severe scam call risk", color = GxTextLo, fontSize = 11.sp)
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = GxTextMid
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showProfiles = true }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Identity Consistency Baselines", color = GxTextHi, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("Behavioral profiles for family & bank imposter detection", color = GxTextLo, fontSize = 11.sp)
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = GxTextMid
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             GxCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1089,10 +1192,7 @@ fun SettingsScreen(
                                 variant = if (isSelected) GxChipVariant.Brand else GxChipVariant.Neutral,
                                 onClick = {
                                     currentLang = code
-                                    context.getSharedPreferences("guardian_prefs", Context.MODE_PRIVATE)
-                                        .edit()
-                                        .putString("preferred_language", code)
-                                        .apply()
+                                    prefs.edit().putString("preferred_language", code).apply()
                                 }
                             )
                         }
@@ -1107,6 +1207,42 @@ fun SettingsScreen(
                 onClick = onLogout,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+
+        // App Version & Quick Seed Button
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        scope.launch(Dispatchers.IO) {
+                            com.guardian.app.protect.advanced.DemoSeed.seedDemoData(context)
+                            withContext(Dispatchers.Main) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "✨ Demo data initialized (Mom profile & Trusted Contact active)",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Guardian v2.0 • Advanced Protection Engine",
+                        style = GxType.caption,
+                        color = GxTextLo
+                    )
+                    Text(
+                        "Tap to re-seed hackathon demo baseline data",
+                        style = GxType.caption,
+                        color = GxPrimary,
+                        fontSize = 10.sp
+                    )
+                }
+            }
         }
     }
 }

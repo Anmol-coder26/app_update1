@@ -66,6 +66,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import com.guardian.app.protect.advanced.IdentityConsistencyChecker
+import com.guardian.app.protect.advanced.PlainReasoningEngine
+import com.guardian.app.protect.advanced.TrustedContactAlertSender
+import com.guardian.app.protect.advanced.VoiceSynthesisDetector
 import com.guardian.app.ui.components.GxButton
 import com.guardian.app.ui.components.GxCard
 import com.guardian.app.ui.components.GxChip
@@ -123,6 +127,9 @@ class CallRiskActivity : ComponentActivity() {
     private var currentCallerNumber by mutableStateOf("")
     private var bhashiniPipeline: com.guardian.app.bhashini.GuardianAnalysisPipeline? = null
     private var usingBhashini = false
+    private var trustedAlertSentForThisCall = false
+    private val pcmBuffer = mutableListOf<Short>()
+    private var lastVoiceAnalysisTime = 0L
 
     @Suppress("DEPRECATION")
     private val callEndListener = object : PhoneStateListener() {
@@ -238,15 +245,105 @@ class CallRiskActivity : ComponentActivity() {
         }
     }
 
+    private suspend fun processAndEnhanceRiskReport(incomingReport: RiskReport, fullContext: String): RiskReport {
+        var enhanced = incomingReport
+
+        // 1. Identity Consistency Check if caller number present
+        if (currentCallerNumber.isNotBlank()) {
+            val db = com.guardian.app.callprotect.GuardianDatabase.getInstance(applicationContext)
+            val profile = db.contactProfileDao().lookup(currentCallerNumber)
+            if (profile != null) {
+                val currentHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                val signals: List<String> = enhanced.topSignals.map { "${it.title}: ${it.detail}" } + listOf(fullContext)
+                val mismatch = IdentityConsistencyChecker.check(
+                    profile = profile,
+                    currentHour = currentHour,
+                    signalsInCall = signals
+                )
+                if (mismatch.detected) {
+                    enhanced = enhanced.copy(
+                        identityMismatch = mismatch,
+                        riskScore = maxOf(enhanced.riskScore, 70)
+                    )
+                }
+            }
+        }
+
+        // 2. Plain Reasoning Generation if missing
+        if (enhanced.plainReasoning.isBlank()) {
+            enhanced = enhanced.copy(
+                plainReasoning = PlainReasoningEngine.explain(enhanced),
+                plainReasoningHi = PlainReasoningEngine.explainInHindi(enhanced)
+            )
+        }
+
+        // 3. Retain active voice synthesis results if available
+        if (riskReport.syntheticConfidence > 0f && enhanced.syntheticConfidence == 0f) {
+            enhanced = enhanced.copy(
+                syntheticConfidence = riskReport.syntheticConfidence,
+                syntheticReasons = riskReport.syntheticReasons
+            )
+        }
+
+        // 4. Trusted Contact Auto-Alert if risk >= 75
+        if (enhanced.riskScore >= 75 && !trustedAlertSentForThisCall) {
+            trustedAlertSentForThisCall = true
+            val caller = currentCallerNumber.ifBlank { "Unknown Caller" }
+            val reasons: List<String> = enhanced.topSignals.map { it.title }.ifEmpty { listOf(enhanced.explanationEn) }
+            val backendUrl = BuildConfig.BACKEND_URL
+            TrustedContactAlertSender.sendAlert(
+                context = applicationContext,
+                callerNumber = caller,
+                riskScore = enhanced.riskScore,
+                topSignals = reasons,
+                backendUrl = backendUrl
+            )
+        }
+
+        return enhanced
+    }
+
+    private fun handlePcmChunk(chunk: ShortArray) {
+        synchronized(pcmBuffer) {
+            for (s in chunk) {
+                pcmBuffer.add(s)
+            }
+            if (pcmBuffer.size > 48000) {
+                val excess = pcmBuffer.size - 48000
+                pcmBuffer.subList(0, excess).clear()
+            }
+        }
+
+        val now = System.currentTimeMillis()
+        if (now - lastVoiceAnalysisTime >= 2000) {
+            lastVoiceAnalysisTime = now
+            val snapshot = synchronized(pcmBuffer) { pcmBuffer.toShortArray() }
+            if (snapshot.size >= 16000) {
+                lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+                    val result = VoiceSynthesisDetector.analyze(snapshot)
+                    if (result.syntheticConfidence > 0.25f) {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            riskReport = riskReport.copy(
+                                syntheticConfidence = result.syntheticConfidence,
+                                syntheticReasons = result.reasons
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private fun startAnalysisPipeline() {
         try {
             val prefLang = getSelectedLanguageFromPrefs()
             bhashiniPipeline = com.guardian.app.bhashini.GuardianAnalysisPipeline(
                 analyzer = semanticAnalyzer,
                 onRiskUpdate = { report ->
-                    runOnUiThread {
-                        riskReport = report
-                        checkCallWarning(report)
+                    lifecycleScope.launch {
+                        val enhanced = processAndEnhanceRiskReport(report, transcriptBuffer.toString())
+                        riskReport = enhanced
+                        checkCallWarning(enhanced)
                     }
                 },
                 onError = { err ->
@@ -254,6 +351,9 @@ class CallRiskActivity : ComponentActivity() {
                     runOnUiThread {
                         fallbackToAgora()
                     }
+                },
+                onPcmChunk = { pcmChunk ->
+                    handlePcmChunk(pcmChunk)
                 }
             )
             bhashiniPipeline?.start(language = prefLang)
@@ -309,7 +409,9 @@ class CallRiskActivity : ComponentActivity() {
                 conversationHistory.add(0, turn)
                 transcriptBuffer.append(" ").append(turn)
                 isAnalyzing = true
-                riskReport = semanticAnalyzer.analyzeChunk(transcriptBuffer.toString())
+                val raw = semanticAnalyzer.analyzeChunk(transcriptBuffer.toString())
+                val enhanced = processAndEnhanceRiskReport(raw, transcriptBuffer.toString())
+                riskReport = enhanced
                 isAnalyzing = false
                 checkCallWarning(riskReport)
                 kotlinx.coroutines.delay(2500)
@@ -365,6 +467,8 @@ class CallRiskActivity : ComponentActivity() {
         riskReport = RiskReport()
         errorMessage = null
         isDetecting = true
+        trustedAlertSentForThisCall = false
+        synchronized(pcmBuffer) { pcmBuffer.clear() }
 
         transcriber = AndroidSpeechTranscriber(this).also { speech ->
             speech.start(selectedLanguage, object : TranscriptListener {
@@ -406,7 +510,9 @@ class CallRiskActivity : ComponentActivity() {
         analysisJob?.cancel()
         analysisJob = lifecycleScope.launch {
             isAnalyzing = true
-            riskReport = semanticAnalyzer.analyzeChunk(fullContext)
+            val raw = semanticAnalyzer.analyzeChunk(fullContext)
+            val enhanced = processAndEnhanceRiskReport(raw, fullContext)
+            riskReport = enhanced
             isAnalyzing = false
             checkCallWarning(riskReport)
         }
@@ -457,6 +563,8 @@ class CallRiskActivity : ComponentActivity() {
         conversationHistory.clear()
         riskReport = RiskReport()
         errorMessage = null
+        trustedAlertSentForThisCall = false
+        synchronized(pcmBuffer) { pcmBuffer.clear() }
         semanticAnalyzer.reset()
     }
 
@@ -466,7 +574,9 @@ class CallRiskActivity : ComponentActivity() {
         transcriptBuffer.append(" ").append(sampleText)
         lifecycleScope.launch {
             isAnalyzing = true
-            riskReport = semanticAnalyzer.analyzeChunk(transcriptBuffer.toString())
+            val raw = semanticAnalyzer.analyzeChunk(transcriptBuffer.toString())
+            val enhanced = processAndEnhanceRiskReport(raw, transcriptBuffer.toString())
+            riskReport = enhanced
             isAnalyzing = false
             checkCallWarning(riskReport)
         }

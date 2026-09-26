@@ -65,6 +65,11 @@ data class SignalBreakdown(
     val detail: String
 )
 
+data class IdentityMismatch(
+    val detected: Boolean = false,
+    val reasons: List<String> = emptyList()
+)
+
 data class RiskReport(
     val riskScore: Int = 0,
     val engines: EngineReports = EngineReports(),
@@ -73,7 +78,12 @@ data class RiskReport(
     val highlightedPhrases: List<String> = emptyList(),
     val isOffline: Boolean = false,
     val latencyMs: Long = 0L,
-    val source: String = "online"
+    val source: String = "online",
+    val plainReasoning: String = "",
+    val plainReasoningHi: String = "",
+    val identityMismatch: IdentityMismatch = IdentityMismatch(),
+    val syntheticConfidence: Float = 0f,
+    val syntheticReasons: List<String> = emptyList()
 ) {
     val status: RiskStatus
         get() = when {
@@ -172,6 +182,8 @@ object RiskReportJsonParser {
 
             val explanationEn = json.optString("explanation_en", "Analysis in progress.")
             val explanationHi = json.optString("explanation_hi", "विश्लेषण प्रगति पर है।")
+            val plainReasoning = json.optString("plain_reasoning", "")
+            val plainReasoningHi = json.optString("plain_reasoning_hi", "")
 
             val phrasesArray = json.optJSONArray("highlighted_phrases") ?: JSONArray()
             val phrases = mutableListOf<String>()
@@ -194,7 +206,9 @@ object RiskReportJsonParser {
                 highlightedPhrases = phrases,
                 isOffline = isOffline,
                 latencyMs = latencyMs,
-                source = if (isOffline) "offline" else "gemini"
+                source = if (isOffline) "offline" else "gemini",
+                plainReasoning = plainReasoning,
+                plainReasoningHi = plainReasoningHi
             )
         } catch (_: Exception) {
             KeywordScorer.score(jsonStr).copy(isOffline = isOffline, latencyMs = latencyMs)

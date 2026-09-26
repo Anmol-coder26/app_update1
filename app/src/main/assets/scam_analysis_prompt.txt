@@ -53,6 +53,8 @@ You MUST respond with VALID JSON ONLY matching this exact schema. Do NOT include
   },
   "explanation_en": "<1-2 sentence concise plain-English explanation of the tactic and threat>",
   "explanation_hi": "हिंदी में स्पष्टीकरण (केवल देवनागरी लिपि में, बिना किसी अंग्रेजी शब्द के)",
+  "plain_reasoning": "One sentence in English explaining why this score, starting with 'Risk is HIGH/MEDIUM/LOW because...'",
+  "plain_reasoning_hi": "Same sentence in Hindi (Devanagari)",
   "highlighted_phrases": ["<phrase1>", "<phrase2>"]
 }
 

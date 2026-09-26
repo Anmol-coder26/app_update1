@@ -48,6 +48,9 @@ android {
 
         val bhashiniRestEndpoint = localProperties.getProperty("BHASHINI_REST_ENDPOINT") ?: ""
         buildConfigField("String", "BHASHINI_REST_ENDPOINT", "\"$bhashiniRestEndpoint\"")
+
+        val backendUrl = localProperties.getProperty("BACKEND_URL") ?: "http://192.168.29.62:3001"
+        buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
     }
 
     buildTypes {
