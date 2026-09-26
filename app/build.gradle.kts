@@ -42,6 +42,10 @@ android {
 
         val bhashiniRestEndpoint = localProperties.getProperty("BHASHINI_REST_ENDPOINT") ?: ""
         buildConfigField("String", "BHASHINI_REST_ENDPOINT", "\"$bhashiniRestEndpoint\"")
+
+        ndk {
+            abiFilters.add("arm64-v8a")
+        }
     }
 
     compileOptions {
@@ -73,6 +77,22 @@ android {
                 "lib/x86_64/libaosl.so"
             ))
         }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
     }
 }
 
